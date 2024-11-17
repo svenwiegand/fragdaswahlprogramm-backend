@@ -6,7 +6,7 @@ export async function hello(request: HttpRequest, context: InvocationContext): P
     const name = request.query.get('name') || await request.text() || 'world'
     const ipAddress = request.headers.get('x-forwarded-for') || 'not available';
 
-    return {body: `Hello, ${name}!\n\nYour IP is ${ipAddress}\n\nNew deployment!`}
+    return {body: `Hello, ${name}!\n\nYour IP is ${ipAddress}`}
 }
 
 app.http('hello', {
