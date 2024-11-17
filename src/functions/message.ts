@@ -9,6 +9,7 @@ const headers = {
     "Cache-Control": "no-cache",
     "Content-Type": "text/event-stream; charset=utf-8",
     "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*", //todo: remove
 }
 
 export async function message(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -53,7 +54,7 @@ async function* openAIStreamToSSE(
     for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content
         if (content) {
-            const preparedContent = "data: " + content.replace("\n", "\ndata: ") + "\n\n"
+            const preparedContent = "data: " + content.replace(/\n/, "\ndata: ") + "\n\n"
             yield encoder.encode(preparedContent)
         }
     }

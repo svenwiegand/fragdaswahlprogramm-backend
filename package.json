@@ -5,7 +5,9 @@
   "main": "dist/src/functions/*.js",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w",
+    "watch:build": "tsc -w",
+    "watch:start": "func start --watch",
+    "dev": "concurrently \"npm run watch:build\" \"npm run watch:start\"",
     "clean": "rimraf dist",
     "prestart": "npm run clean && npm run build",
     "start": "func start",
@@ -18,6 +20,7 @@
   "devDependencies": {
     "@types/node": "18.x",
     "azure-functions-core-tools": "^4.x",
+    "concurrently": "^9.1.0",
     "rimraf": "^5.0.0",
     "typescript": "^4.0.0"
   }
