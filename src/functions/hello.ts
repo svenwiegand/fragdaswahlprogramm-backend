@@ -9,8 +9,8 @@ export async function hello(request: HttpRequest, context: InvocationContext): P
     return {body: `Hello, ${name}!\n\nYour IP is ${ipAddress}`}
 }
 
-app.http('Hello', {
-    methods: ['GET', 'POST'],
+app.http('hello', {
+    methods: ['GET'],
     authLevel: 'anonymous',
     handler: hello,
 })
