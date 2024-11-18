@@ -53,10 +53,11 @@ async function* openAIStreamToSSE(
 
     for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content
-        if (content) {
-            const preparedContent = "data: " + content.replace(/\n/, "\ndata: ") + "\n\n"
-            yield encoder.encode(preparedContent)
+        const lines = content.split("\n")
+        for (const line of lines) {
+            yield encoder.encode(`data: ${line}\n`)
         }
+        yield encoder.encode("\n")
     }
 }
 
