@@ -1,8 +1,11 @@
 import {app, HttpRequest, HttpResponseInit, InvocationContext} from "@azure/functions"
-import OpenAI from "openai"
+import { AzureOpenAI, OpenAI } from "openai"
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+const aiClient = new AzureOpenAI({
+    endpoint: process.env.AZURE_OPENAI_ENDPOINT,
+    apiKey: process.env.AZURE_OPENAI_API_KEY,
+    apiVersion: process.env.MESSAGE_AZURE_OPENAI_API_VERSION,
+    deployment: process.env.MESSAGE_AZURE_OPENAI_DEPLOYMENT,
 })
 
 const headers = {
@@ -25,8 +28,8 @@ export async function message(request: HttpRequest, context: InvocationContext):
     }
 
     try {
-        const stream = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+        const stream = await aiClient.chat.completions.create({
+            model: "",
             messages: [{role: "user", content: message}],
             stream: true,
         })
@@ -53,11 +56,13 @@ async function* openAIStreamToSSE(
 
     for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content
-        const lines = content.split("\n")
-        for (const line of lines) {
-            yield encoder.encode(`data: ${line}\n`)
+        if (content) {
+            const lines = content.split("\n")
+            for (const line of lines) {
+                yield encoder.encode(`data: ${line}\n`)
+            }
+            yield encoder.encode("\n")
         }
-        yield encoder.encode("\n")
     }
 }
 
