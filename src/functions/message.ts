@@ -1,6 +1,7 @@
 import {app} from "@azure/functions"
 import {AIClient} from "./common/ai-client"
-import {ChatCompletionStream, streamingAiFunction} from "./common/ai-function"
+import {streamingAiFunction} from "./common/ai-function"
+import {ChatCompletionStream, chatCompletionStreamToSSE} from "./common/sse"
 
 async function generateResponse(aiClient: AIClient, message: string): Promise<ChatCompletionStream> {
     return aiClient.chat.completions.create({
@@ -10,7 +11,7 @@ async function generateResponse(aiClient: AIClient, message: string): Promise<Ch
     })
 }
 
-const message = streamingAiFunction(generateResponse)
+const message = streamingAiFunction(generateResponse, chatCompletionStreamToSSE)
 
 app.setup({enableHttpStream: true})
 app.http('message', {

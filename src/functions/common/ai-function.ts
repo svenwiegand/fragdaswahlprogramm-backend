@@ -1,41 +1,19 @@
 import {HttpRequest, HttpResponseInit, InvocationContext} from "@azure/functions"
-import {OpenAI} from "openai"
 import {aiClient, AIClient} from "./ai-client"
+import {SSEStream} from "./sse"
 
-const headers = {
+export const headers = {
     "Cache-Control": "no-cache",
     "Content-Type": "text/event-stream; charset=utf-8",
     "Connection": "keep-alive",
     "Access-Control-Allow-Origin": "*", //todo: remove
 }
 
-export type ChatCompletionStream = AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
-type SSEStream = AsyncIterable<Uint8Array>
-
-async function streamResponse(stream: ChatCompletionStream): Promise<HttpResponseInit> {
-    const body = openAIStreamToSSE(stream)
-    return {headers, body}
-}
-
-async function* openAIStreamToSSE(stream: ChatCompletionStream): SSEStream {
-    const encoder = new TextEncoder()
-
-    for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content
-        if (content) {
-            const lines = content.split("\n")
-            for (const line of lines) {
-                yield encoder.encode(`data: ${line}\n`)
-            }
-            yield encoder.encode("\n")
-        }
-    }
-}
-
 type AzureFunction = (request: HttpRequest, context: InvocationContext) => Promise<HttpResponseInit>
-type StreamingFunction = (aiClient: AIClient, message: string) => Promise<ChatCompletionStream>
+type StreamingFunction<StreamType> = (aiClient: AIClient, message: string) => Promise<StreamType>
+type SSEGenerator<StreamType> = (stream: StreamType) => SSEStream
 
-export function streamingAiFunction(f: StreamingFunction): AzureFunction {
+export function streamingAiFunction<StreamType>(f: StreamingFunction<StreamType>, sseGenerator: SSEGenerator<StreamType>): AzureFunction {
     return async (request: HttpRequest, context: InvocationContext) => {
         const message = await request.text()
         if (!message) {
@@ -47,7 +25,8 @@ export function streamingAiFunction(f: StreamingFunction): AzureFunction {
 
         try {
             const stream = await f(aiClient, message)
-            return streamResponse(stream)
+            const body = sseGenerator(stream)
+            return {headers, body}
         } catch (error) {
             context.error("Fehler beim Abrufen der Antwort von OpenAI:", error)
             return {
