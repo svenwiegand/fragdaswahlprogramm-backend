@@ -2,7 +2,7 @@ import {OpenAI} from "openai"
 import {AssistantStreamEvent} from "openai/resources/beta"
 import {Stream} from "openai/streaming"
 
-export type SSEStream = AsyncIterable<Uint8Array>
+export type  SSEStream = AsyncIterable<Uint8Array>
 
 export type ChatCompletionStream = AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
 export async function* chatCompletionStreamToSSE(stream: ChatCompletionStream): SSEStream {
@@ -26,6 +26,7 @@ export async function* assistantStreamToSSE(stream: AssistantStream): SSEStream 
 
     for await (const event of stream) {
         if (event.event === "thread.message.delta") {
+            yield encoder.encode("event: message\n")
             for (const delta of event.data.delta.content) {
                 if (delta.type === "text") {
                     const lines = delta.text.value.split("\n")

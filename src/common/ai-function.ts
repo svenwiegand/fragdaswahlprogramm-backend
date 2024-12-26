@@ -2,7 +2,7 @@ import {HttpRequest, HttpResponseInit, InvocationContext} from "@azure/functions
 import {aiClient, AIClient} from "./ai-client"
 import {SSEStream} from "./sse"
 
-export const headers = {
+const standardHeaders = {
     "Cache-Control": "no-cache",
     "Content-Type": "text/event-stream; charset=utf-8",
     "Connection": "keep-alive",
@@ -10,10 +10,23 @@ export const headers = {
 }
 
 type AzureFunction = (request: HttpRequest, context: InvocationContext) => Promise<HttpResponseInit>
-type StreamingFunction<StreamType> = (aiClient: AIClient, message: string) => Promise<StreamType>
-type SSEGenerator<StreamType> = (stream: StreamType) => SSEStream
+export type StreamingFunctionResponse = {
+    stream: SSEStream
+    additionalHeaders: Record<string, string>
+}
+type StreamingFunction = (aiClient: AIClient, message: string, request: HttpRequest) => Promise<SSEStream | StreamingFunctionResponse>
 
-export function streamingAiFunction<StreamType>(f: StreamingFunction<StreamType>, sseGenerator: SSEGenerator<StreamType>): AzureFunction {
+function isStreamingFunctionResponse(value: SSEStream | StreamingFunctionResponse): value is StreamingFunctionResponse {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        "stream" in value &&
+        "additionalHeaders" in value &&
+        typeof value.additionalHeaders === "object"
+    )
+}
+
+export function streamingAiFunction(f: StreamingFunction): AzureFunction {
     return async (request: HttpRequest, context: InvocationContext) => {
         const message = await request.text()
         if (!message) {
@@ -24,8 +37,10 @@ export function streamingAiFunction<StreamType>(f: StreamingFunction<StreamType>
         }
 
         try {
-            const stream = await f(aiClient, message)
-            const body = sseGenerator(stream)
+            const response = await f(aiClient, message, request)
+            const isResponseObject = isStreamingFunctionResponse(response)
+            const body = isResponseObject ? response.stream : response
+            const headers = isResponseObject ? {...standardHeaders, ...response.additionalHeaders} : standardHeaders
             return {headers, body}
         } catch (error) {
             context.error("Fehler beim Abrufen der Antwort von OpenAI:", error)
