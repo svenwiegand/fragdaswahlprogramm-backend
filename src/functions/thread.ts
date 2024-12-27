@@ -2,9 +2,7 @@ import {app, HttpRequest} from "@azure/functions"
 import {AIClient} from "../common/ai-client"
 import {streamingAiFunction, StreamingFunctionResponse} from "../common/ai-function"
 import {SSEStream} from "../common/sse"
-import {AssistantStream} from "openai/lib/AssistantStream"
 import {AssistantStreamEvent} from "openai/resources/beta"
-import {Stream} from "openai/streaming"
 
 const role = "user"
 const assistantId = "asst_4QNzCgFQvvfevSBN851G3waR"
@@ -48,7 +46,8 @@ async function postToThread(aiClient: AIClient, message: string, request: HttpRe
     return generateThreadResponse(aiClient, threadId, message)
 }
 
-async function* assistantStreamToSSE(aiClient: AIClient, stream: Stream<AssistantStreamEvent>): SSEStream {
+async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<AssistantStreamEvent>): SSEStream {
+    console.log("Converting assistant stream to SSE")
     const encoder = new TextEncoder()
 
     for await (const event of stream) {
@@ -64,14 +63,14 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: Stream<Assistan
             }
             yield encoder.encode("\n")
         } else if (event.event === "thread.run.requires_action") {
-            for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
+            for await (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
                 console.log(`Tool call: ${toolCall.function.name}`)
                 if (toolCall.function.name === "get_instructions") {
                     console.log(toolCall.function.arguments)
                     const query = JSON.parse(toolCall.function.arguments) as Query
                     const instructions = getInstructions(query)
                     console.log(instructions)
-                    const stream: AssistantStream = aiClient.beta.threads.runs.submitToolOutputsStream(
+                    const stream = aiClient.beta.threads.runs.submitToolOutputsStream(
                         event.data.thread_id,
                         event.data.id,
                         {
@@ -81,26 +80,7 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: Stream<Assistan
                             }]
                         },
                     )
-                    for await (const event of stream) {
-                        if (event.event === "thread.message.delta") {
-                            yield encoder.encode("event: message\n")
-                            for (const delta of event.data.delta.content) {
-                                if (delta.type === "text") {
-                                    const lines = delta.text.value.split("\n")
-                                    for (const line of lines) {
-                                        yield encoder.encode(`data: ${line}\n`)
-                                    }
-                                }
-                            }
-                            yield encoder.encode("\n")
-                        } else if (event.event === "thread.run.requires_action") {
-                            for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
-                                console.log(`Tool call: ${toolCall.function.name}`)
-                            }
-                        } else {
-                            console.log(`Event: ${event.event}`)
-                        }
-                    }
+                    yield* assistantStreamToSSE(aiClient, stream)
                 }
             }
         } else {
