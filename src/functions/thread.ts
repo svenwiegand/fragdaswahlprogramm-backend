@@ -1,16 +1,23 @@
 import {app, HttpRequest} from "@azure/functions"
 import {AIClient} from "../common/ai-client"
 import {streamingAiFunction, StreamingFunctionResponse} from "../common/ai-function"
-import {assistantStreamToSSE} from "../common/sse"
+import {SSEStream} from "../common/sse"
+import {AssistantStream} from "openai/lib/AssistantStream"
+import {AssistantStreamEvent} from "openai/resources/beta"
+import {Stream} from "openai/streaming"
 
 const role = "user"
 const assistantId = "asst_4QNzCgFQvvfevSBN851G3waR"
 
 async function generateThreadResponse(aiClient: AIClient, threadId: string, message: string): Promise<StreamingFunctionResponse> {
     await aiClient.beta.threads.messages.create(threadId, {role, content: message})
-    const stream = await aiClient.beta.threads.runs.create(threadId, {assistant_id: assistantId, stream: true})
+    const stream = await aiClient.beta.threads.runs.create(threadId, {
+        assistant_id: assistantId,
+        tool_choice: "required",//{type: "function", function: {name: "get_instructions"}},
+        stream: true,
+    })
     return {
-        stream: assistantStreamToSSE(stream),
+        stream: assistantStreamToSSE(aiClient, stream),
         additionalHeaders: {
             "Thread-ID": threadId,
             "Access-Control-Expose-Headers": "Thread-ID",
@@ -28,6 +35,133 @@ async function postToThread(aiClient: AIClient, message: string, request: HttpRe
     const threadId = request.params.threadId
     console.log(`posting message to existing thread ${threadId}`)
     return generateThreadResponse(aiClient, threadId, message)
+}
+
+async function* assistantStreamToSSE(aiClient: AIClient, stream: Stream<AssistantStreamEvent>): SSEStream {
+    const encoder = new TextEncoder()
+
+    for await (const event of stream) {
+        if (event.event === "thread.message.delta") {
+            yield encoder.encode("event: message\n")
+            for (const delta of event.data.delta.content) {
+                if (delta.type === "text") {
+                    const lines = delta.text.value.split("\n")
+                    for (const line of lines) {
+                        yield encoder.encode(`data: ${line}\n`)
+                    }
+                }
+            }
+            yield encoder.encode("\n")
+        } else if (event.event === "thread.run.requires_action") {
+            for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
+                console.log(`Tool call: ${toolCall.function.name}`)
+                if (toolCall.function.name === "get_instructions") {
+                    console.log(toolCall.function.arguments)
+                    const query = JSON.parse(toolCall.function.arguments) as Query
+                    const instructions = getInstructions(query)
+                    console.log(instructions)
+                    const stream: AssistantStream = aiClient.beta.threads.runs.submitToolOutputsStream(
+                        event.data.thread_id,
+                        event.data.id,
+                        {
+                            tool_outputs: [{
+                                tool_call_id: toolCall.id,
+                                output: instructions,
+                            }]
+                        },
+                    )
+                    for await (const event of stream) {
+                        if (event.event === "thread.message.delta") {
+                            yield encoder.encode("event: message\n")
+                            for (const delta of event.data.delta.content) {
+                                if (delta.type === "text") {
+                                    const lines = delta.text.value.split("\n")
+                                    for (const line of lines) {
+                                        yield encoder.encode(`data: ${line}\n`)
+                                    }
+                                }
+                            }
+                            yield encoder.encode("\n")
+                        } else if (event.event === "thread.run.requires_action") {
+                            for (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
+                                console.log(`Tool call: ${toolCall.function.name}`)
+                            }
+                        } else {
+                            console.log(`Event: ${event.event}`)
+                        }
+                    }
+                }
+            }
+        } else {
+            console.log(`Event: ${event.event}`)
+        }
+    }
+}
+
+type Party = "afd" | "bsw" | "cdu-csu" | "fdp" | "grüne" | "linke" | "spd" | "volt"
+const supportedParties: Party[] = ["afd", "cdu-csu", "fdp", "grüne", "linke", "spd"]
+
+type Query = {
+    queriedParties: Party[]
+    queryType: "program" | "assessment" | "quote" | "inquiry" | "inappropriate"
+}
+
+function getInstructions(query: Query): string {
+    switch (query.queryType) {
+        case "program":
+            return detailedInstructions(query.queriedParties, `
+                Beantworte die Frage des Nutzer ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien.
+            `)
+        case "assessment":
+            return detailedInstructions(query.queriedParties, `
+                Nimm die angefragte Bewertung vor.
+            `)
+        case "quote":
+            return detailedInstructions(query.queriedParties, `
+                Zitiere die relevanten Ausschnitte ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien. 
+            `)
+        case "inquiry":
+            return detailedInstructions(query.queriedParties, `
+                Beantworte die Rückfrage des Nutzers.
+            `)
+        case "inappropriate":
+            return "Weise den Nutzer darauf hin, dass die Frage unangemessen ist. Du beantwortest ihm gerne Fragen zu den Wahlprogrammen der Parteien zur Bundestagswahl 2025."
+    }
+}
+
+function detailedInstructions(parties: Party[], instruction: string): string {
+    // No parties specified at all
+    if (parties.length === 0) {
+        return `Generiere keine Ausgabe.`
+    }
+
+    // All specified parties do not have a program
+    const supportedQueriedParties = parties.filter(party => supportedParties.includes(party))
+    if (supportedQueriedParties.length === 0) {
+        return `
+            Weise den Nutzer darauf hin, dass Dir für keine der von ihm angefragten Parteien Wahlprogramme vorliegen.
+        `
+    }
+
+    // Some specified parties do not have a program
+    if (supportedQueriedParties.length !== parties.length) {
+        const unsupportedParties = parties.filter(party => !supportedParties.includes(party))
+        return `
+            ${instruction}
+            Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
+            Weise den Nutzer darauf hin, dass Dir für die folgenden Parteien keine Wahlprogramme vorliegen: ${unsupportedParties.join(", ")}
+            
+            Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.                
+        `
+    }
+
+    // All requested parties are supported
+    return `
+        ${instruction}
+        Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
+            
+        Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.                
+    `
 }
 
 const createThreadFunction = streamingAiFunction(createThread)
