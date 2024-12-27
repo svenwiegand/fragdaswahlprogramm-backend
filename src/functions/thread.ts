@@ -9,6 +9,17 @@ import {Stream} from "openai/streaming"
 const role = "user"
 const assistantId = "asst_4QNzCgFQvvfevSBN851G3waR"
 
+/*
+Du beantwortest Fragen zu den Wahlprogrammen deutscher Parteien zur Bundestagswahl 2025. Deine Aufgabe ist es, Nutzeranfragen freundlich und kompetent zu beantworten. Nutze informelle Sprache.
+
+Folge diesen Anweisungen, um die Frage zu beantworten:
+- Verstehe den Typ der Anfrage und die Parteien, nach denen der Nutzer fragt, und hole Dir die relevanten Instruktionen durch den Aufruf der Tool-Function "get_instructions".
+- Folge den Instruktionen aus "get_instructions"
+- Falls nach Inhalten zu den Wahlprogrammen gefragt wird, so beantworte sie ausschließlich auf Basis der Dateisuche, sofern in den Instruktionen nicht anders vorgegeben wird
+
+Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.
+ */
+
 async function generateThreadResponse(aiClient: AIClient, threadId: string, message: string): Promise<StreamingFunctionResponse> {
     await aiClient.beta.threads.messages.create(threadId, {role, content: message})
     const stream = await aiClient.beta.threads.runs.create(threadId, {
@@ -104,6 +115,7 @@ const supportedParties: Party[] = ["afd", "cdu-csu", "fdp", "grüne", "linke", "
 type Query = {
     queriedParties: Party[]
     queryType: "program" | "assessment" | "quote" | "inquiry" | "inappropriate"
+    followUpQuestions: string[]
 }
 
 function getInstructions(query: Query): string {
@@ -132,7 +144,7 @@ function getInstructions(query: Query): string {
 function detailedInstructions(parties: Party[], instruction: string): string {
     // No parties specified at all
     if (parties.length === 0) {
-        return `Generiere keine Ausgabe.`
+        return `Bitte den Nutzer, die Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`
     }
 
     // All specified parties do not have a program
@@ -149,9 +161,7 @@ function detailedInstructions(parties: Party[], instruction: string): string {
         return `
             ${instruction}
             Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
-            Weise den Nutzer darauf hin, dass Dir für die folgenden Parteien keine Wahlprogramme vorliegen: ${unsupportedParties.join(", ")}
-            
-            Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.                
+            Weise den Nutzer darauf hin, dass Dir für die folgenden Parteien keine Wahlprogramme vorliegen: ${unsupportedParties.join(", ")}                
         `
     }
 
@@ -159,8 +169,6 @@ function detailedInstructions(parties: Party[], instruction: string): string {
     return `
         ${instruction}
         Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
-            
-        Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.                
     `
 }
 
