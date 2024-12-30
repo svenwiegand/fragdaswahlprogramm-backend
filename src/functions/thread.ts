@@ -50,42 +50,54 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<A
     const encoder = new TextEncoder()
 
     for await (const event of stream) {
-        if (event.event === "thread.message.delta") {
-            yield encoder.encode("event: message\n")
-            for (const delta of event.data.delta.content) {
-                if (delta.type === "text") {
-                    const lines = delta.text.value.split("\n")
-                    for (const line of lines) {
-                        yield encoder.encode(`data: ${line}\n`)
-                    }
-                }
-            }
-            yield encoder.encode("\n")
-        } else if (event.event === "thread.run.requires_action") {
-            for await (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
-                console.log(`Tool call: ${toolCall.function.name}`)
-                if (toolCall.function.name === "get_instructions") {
-                    console.log(toolCall.function.arguments)
-                    const query = JSON.parse(toolCall.function.arguments) as Query
-                    const instructions = getInstructions(query)
-                    console.log(instructions)
-                    const stream = aiClient.beta.threads.runs.submitToolOutputsStream(
-                        event.data.thread_id,
-                        event.data.id,
-                        {
-                            tool_outputs: [{
-                                tool_call_id: toolCall.id,
-                                output: instructions,
-                            }]
-                        },
-                    )
-                    yield* assistantStreamToSSE(aiClient, stream)
-                }
-            }
+        if (event.event === "thread.run.requires_action") {
+            submitFunctionOutput(aiClient, encoder, event)
+        } else if (event.event === "thread.message.delta") {
+            sendMessageDelta(encoder, event)
         } else {
             console.log(`Event: ${event.event}`)
         }
     }
+}
+
+async function* submitFunctionOutput(aiClient: AIClient, encoder: TextEncoder, event: AssistantStreamEvent.ThreadRunRequiresAction) {
+    for await (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
+        console.log(`Tool call: ${toolCall.function.name}`)
+        if (toolCall.function.name === "get_instructions") {
+            console.log(toolCall.function.arguments)
+            const query = JSON.parse(toolCall.function.arguments) as Query
+            const instructions = getInstructions(query)
+            console.log(instructions)
+            const stream = aiClient.beta.threads.runs.submitToolOutputsStream(
+                event.data.thread_id,
+                event.data.id,
+                {
+                    tool_outputs: [{
+                        tool_call_id: toolCall.id,
+                        output: instructions,
+                    }]
+                },
+            )
+            yield* assistantStreamToSSE(aiClient, stream)
+        }
+    }
+}
+
+function* sendMessageDelta(encoder: TextEncoder, event: AssistantStreamEvent.ThreadMessageDelta) {
+    for (const delta of event.data.delta.content) {
+        if (delta.type === "text") {
+            yield sendEvent(encoder, "message", delta.text.value)
+        }
+    }
+}
+
+function* sendEvent(encoder: TextEncoder, event: string, data: string) {
+    yield encoder.encode(`event: ${event}\n`)
+    const lines = data.split("\n")
+    for (const line of lines) {
+        yield encoder.encode(`data: ${line}\n`)
+    }
+    yield encoder.encode("\n")
 }
 
 type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
