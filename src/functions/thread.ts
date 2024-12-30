@@ -88,8 +88,9 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<A
     }
 }
 
-type Party = "afd" | "bsw" | "cdu-csu" | "fdp" | "grüne" | "linke" | "spd" | "volt"
-const supportedParties: Party[] = ["afd", "cdu-csu", "fdp", "grüne", "linke", "spd"]
+type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
+const supportedParties: Party[] = ["afd", "cdu-csu", "fdp", "gruene", "spd"]
+const maxNumberParties = 3
 
 type Query = {
     queriedParties: Party[]
@@ -102,10 +103,12 @@ function getInstructions(query: Query): string {
         case "program":
             return detailedInstructions(query.queriedParties, `
                 Beantworte die Frage des Nutzer ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien.
+                Gib die relevanten Kernpunkte als kompakte Aufzählung aus.
             `)
         case "assessment":
             return detailedInstructions(query.queriedParties, `
                 Nimm die angefragte Bewertung vor.
+                Gib die Kernpunkte der Bewertung als kompakte Aufzählung aus.
             `)
         case "quote":
             return detailedInstructions(query.queriedParties, `
@@ -121,9 +124,9 @@ function getInstructions(query: Query): string {
 }
 
 function detailedInstructions(parties: Party[], instruction: string): string {
-    // No parties specified at all
-    if (parties.length === 0) {
-        return `Bitte den Nutzer, die Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`
+    // No parties specified at all or too many parties specified
+    if (parties.length === 0 || parties.length > maxNumberParties) {
+        return `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`
     }
 
     // All specified parties do not have a program
