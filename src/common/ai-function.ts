@@ -6,7 +6,7 @@ const standardHeaders = {
     "Cache-Control": "no-cache",
     "Content-Type": "text/event-stream; charset=utf-8",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*", //todo: remove
+    "Access-Control-Allow-Origin": "*", // required locally and ignored in production
 }
 
 type AzureFunction = (request: HttpRequest, context: InvocationContext) => Promise<HttpResponseInit>
