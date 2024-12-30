@@ -1,7 +1,6 @@
 import {app, HttpRequest} from "@azure/functions"
 import {AIClient} from "../common/ai-client"
-import {streamingAiFunction, StreamingFunctionResponse} from "../common/ai-function"
-import {SSEStream} from "../common/sse"
+import {SSEStream, streamingAiFunction, StreamingFunctionResponse} from "../common/ai-function"
 import {AssistantStreamEvent} from "openai/resources/beta"
 
 const role = "user"

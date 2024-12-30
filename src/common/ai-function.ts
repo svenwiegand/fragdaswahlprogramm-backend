@@ -1,6 +1,5 @@
 import {HttpRequest, HttpResponseInit, InvocationContext} from "@azure/functions"
 import {aiClient, AIClient} from "./ai-client"
-import {SSEStream} from "./sse"
 
 const standardHeaders = {
     "Cache-Control": "no-cache",
@@ -9,6 +8,7 @@ const standardHeaders = {
     "Access-Control-Allow-Origin": "*", // required locally and ignored in production
 }
 
+export type  SSEStream = AsyncIterable<Uint8Array>
 type AzureFunction = (request: HttpRequest, context: InvocationContext) => Promise<HttpResponseInit>
 export type StreamingFunctionResponse = {
     stream: SSEStream
