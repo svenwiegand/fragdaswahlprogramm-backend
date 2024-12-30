@@ -2,9 +2,15 @@ import {app, HttpRequest} from "@azure/functions"
 import {AIClient} from "../common/ai-client"
 import {SSEStream, streamingAiFunction, StreamingFunctionResponse} from "../common/ai-function"
 import {AssistantStreamEvent} from "openai/resources/beta"
+import {TextEncoder} from "node:util"
+import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
+import {AssistantStream} from "openai/lib/AssistantStream"
 
 const role = "user"
 const assistantId = "asst_4QNzCgFQvvfevSBN851G3waR"
+
+type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
+const maxNumberParties = 4
 
 /*
 Du beantwortest Fragen zu den Wahlprogrammen deutscher Parteien zur Bundestagswahl 2025. Deine Aufgabe ist es, Nutzeranfragen freundlich und kompetent zu beantworten. Nutze informelle Sprache.
@@ -51,47 +57,88 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<A
 
     for await (const event of stream) {
         if (event.event === "thread.run.requires_action") {
-            submitFunctionOutput(aiClient, encoder, event)
+            yield* processFunctionCalls(aiClient, encoder, event)
         } else if (event.event === "thread.message.delta") {
-            sendMessageDelta(encoder, event)
+            yield* sendMessageDelta(encoder, event)
         } else {
             console.log(`Event: ${event.event}`)
         }
     }
 }
 
-async function* submitFunctionOutput(aiClient: AIClient, encoder: TextEncoder, event: AssistantStreamEvent.ThreadRunRequiresAction) {
+type Query = {
+    queriedParties: Party[]
+    queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "inappropriate"
+    followUpQuestions: string[]
+}
+
+type Command = "partySelector" | "followUpQuestions"
+type Instruction = {
+    instruction: string
+    command?: Command
+}
+const instruction = (command: Command | undefined, instruction: string): Instruction => ({
+    instruction, command
+})
+
+async function* processFunctionCalls(aiClient: AIClient, encoder: TextEncoder, event: AssistantStreamEvent.ThreadRunRequiresAction): SSEStream {
+    console.log(`Event: ${event.event} (${event.data.required_action.submit_tool_outputs.tool_calls.length} tool calls)`)
     for await (const toolCall of event.data.required_action.submit_tool_outputs.tool_calls) {
         console.log(`Tool call: ${toolCall.function.name}`)
         if (toolCall.function.name === "get_instructions") {
             console.log(toolCall.function.arguments)
             const query = JSON.parse(toolCall.function.arguments) as Query
-            const instructions = getInstructions(query)
-            console.log(instructions)
-            const stream = aiClient.beta.threads.runs.submitToolOutputsStream(
-                event.data.thread_id,
-                event.data.id,
-                {
-                    tool_outputs: [{
-                        tool_call_id: toolCall.id,
-                        output: instructions,
-                    }]
-                },
-            )
+            const instruction = getInstructions(query)
+            console.log(instruction.instruction)
+            console.log(instruction.command)
+            if (instruction.command === "partySelector") {
+                yield* requestPartySelector(encoder)
+            } else if (instruction.command === "followUpQuestions") {
+                yield* sendFollowUpQuestions(encoder, query.followUpQuestions)
+            }
+            const stream = submitFunctionOutput(aiClient, event, toolCall, instruction.instruction)
             yield* assistantStreamToSSE(aiClient, stream)
         }
     }
 }
 
-function* sendMessageDelta(encoder: TextEncoder, event: AssistantStreamEvent.ThreadMessageDelta) {
+function submitFunctionOutput(
+    aiClient: AIClient,
+    event: AssistantStreamEvent.ThreadRunRequiresAction,
+    toolCall:  RequiredActionFunctionToolCall,
+    output: string
+): AssistantStream {
+    return aiClient.beta.threads.runs.submitToolOutputsStream(
+        event.data.thread_id,
+        event.data.id,
+        {
+            tool_outputs: [{
+                tool_call_id: toolCall.id,
+                output: output,
+            }]
+        },
+    )
+}
+
+async function* sendMessageDelta(encoder: TextEncoder, event: AssistantStreamEvent.ThreadMessageDelta): SSEStream {
     for (const delta of event.data.delta.content) {
         if (delta.type === "text") {
-            yield sendEvent(encoder, "message", delta.text.value)
+            yield* sendEvent(encoder, "message", delta.text.value)
         }
     }
 }
 
-function* sendEvent(encoder: TextEncoder, event: string, data: string) {
+async function* sendFollowUpQuestions(encoder: TextEncoder, questions: string[]): SSEStream {
+    for (const question of questions) {
+        yield* sendEvent(encoder, "followUpQuestion", question)
+    }
+}
+
+async function* requestPartySelector(encoder: TextEncoder): SSEStream {
+    yield* sendEvent(encoder, "command", "selectParties")
+}
+
+async function* sendEvent(encoder: TextEncoder, event: string, data: string): SSEStream {
     yield encoder.encode(`event: ${event}\n`)
     const lines = data.split("\n")
     for (const line of lines) {
@@ -100,70 +147,44 @@ function* sendEvent(encoder: TextEncoder, event: string, data: string) {
     yield encoder.encode("\n")
 }
 
-type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
-const supportedParties: Party[] = ["afd", "cdu-csu", "fdp", "gruene", "spd"]
-const maxNumberParties = 3
-
-type Query = {
-    queriedParties: Party[]
-    queryType: "program" | "assessment" | "quote" | "inquiry" | "inappropriate"
-    followUpQuestions: string[]
-}
-
-function getInstructions(query: Query): string {
+function getInstructions(query: Query): Instruction {
     switch (query.queryType) {
         case "program":
-            return detailedInstructions(query.queriedParties, `
+            return detailedInstructions(query.queriedParties, true, `
                 Beantworte die Frage des Nutzer ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien.
                 Gib die relevanten Kernpunkte als kompakte Aufzählung aus.
             `)
+        case "partySearch":
+            return instruction("followUpQuestions", `
+                Nenne dem Nutzer die Parteien, die laut den Dir vorliegenden Wahlprogrammen die gefragten Positionen vertreten.
+                Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
+            `)
         case "assessment":
-            return detailedInstructions(query.queriedParties, `
+            return detailedInstructions(query.queriedParties, true, `
                 Nimm die angefragte Bewertung vor.
                 Gib die Kernpunkte der Bewertung als kompakte Aufzählung aus.
             `)
         case "quote":
-            return detailedInstructions(query.queriedParties, `
+            return detailedInstructions(query.queriedParties, false, `
                 Zitiere die relevanten Ausschnitte ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien. 
             `)
         case "inquiry":
-            return detailedInstructions(query.queriedParties, `
+            return detailedInstructions(query.queriedParties, true, `
                 Beantworte die Rückfrage des Nutzers.
             `)
         case "inappropriate":
-            return "Weise den Nutzer darauf hin, dass die Frage unangemessen ist. Du beantwortest ihm gerne Fragen zu den Wahlprogrammen der Parteien zur Bundestagswahl 2025."
+            return instruction(undefined, "Weise den Nutzer darauf hin, dass die Frage unangemessen ist. Du beantwortest ihm gerne Fragen zu den Wahlprogrammen der Parteien zur Bundestagswahl 2025.")
     }
 }
 
-function detailedInstructions(parties: Party[], instruction: string): string {
+function detailedInstructions(parties: Party[], followUpQuestions: boolean, instruct: string): Instruction {
     // No parties specified at all or too many parties specified
     if (parties.length === 0 || parties.length > maxNumberParties) {
-        return `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`
-    }
-
-    // All specified parties do not have a program
-    const supportedQueriedParties = parties.filter(party => supportedParties.includes(party))
-    if (supportedQueriedParties.length === 0) {
-        return `
-            Weise den Nutzer darauf hin, dass Dir für keine der von ihm angefragten Parteien Wahlprogramme vorliegen.
-        `
-    }
-
-    // Some specified parties do not have a program
-    if (supportedQueriedParties.length !== parties.length) {
-        const unsupportedParties = parties.filter(party => !supportedParties.includes(party))
-        return `
-            ${instruction}
-            Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
-            Weise den Nutzer darauf hin, dass Dir für die folgenden Parteien keine Wahlprogramme vorliegen: ${unsupportedParties.join(", ")}                
-        `
+        return instruction("partySelector", `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`)
     }
 
     // All requested parties are supported
-    return `
-        ${instruction}
-        Beantworte die Frage für die folgenden Parteien: ${supportedQueriedParties.join(", ")}
-    `
+    return instruction(followUpQuestions ? "followUpQuestions" : undefined, instruct)
 }
 
 const createThreadFunction = streamingAiFunction(createThread)
