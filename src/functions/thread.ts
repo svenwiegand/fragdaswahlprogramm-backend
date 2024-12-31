@@ -7,21 +7,24 @@ import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
 
 const role = "user"
-const assistantId = "asst_4QNzCgFQvvfevSBN851G3waR"
+const assistantId = "asst_iDqo1jpKOaCxsWkqBDe45sO7"
 
-type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
 const maxNumberParties = 4
+type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
+type PartyProps = {
+    name: string
+    symbol: string
+    assistantId: string
+}
 
-/*
-Du beantwortest Fragen zu den Wahlprogrammen deutscher Parteien zur Bundestagswahl 2025. Deine Aufgabe ist es, Nutzeranfragen freundlich und kompetent zu beantworten. Nutze informelle Sprache.
-
-Folge diesen Anweisungen, um die Frage zu beantworten:
-- Verstehe den Typ der Anfrage und die Parteien, nach denen der Nutzer fragt, und hole Dir die relevanten Instruktionen durch den Aufruf der Tool-Function "get_instructions".
-- Folge den Instruktionen aus "get_instructions"
-- Falls nach Inhalten zu den Wahlprogrammen gefragt wird, so beantworte sie ausschließlich auf Basis der Dateisuche, sofern in den Instruktionen nicht anders vorgegeben wird
-
-Trenne die Aussagen der einzelnen Parteien jeweils durch eine Überschrift der ersten Ebene, die den offiziellen Namen der Partei enthält, sodass klar ersichtlich ist, welche Haltung von welcher Partei stammt. Du kannst die Überschrift mit dem Parteinamen weglassen, wenn die Frage sich nur auf eine Partei bezieht.
- */
+const parties: Record<Party, PartyProps> = {
+    afd: {name: "AfD", symbol: "afd", assistantId: "asst_xnOWBOCCWFcBU9kUD1bBS9UZ"},
+    "cdu-csu": {name: "CDU/CSU", symbol: "cdu-csu", assistantId: "asst_QISOObUD8u5Dfi4X3HkLb3Ao"},
+    fdp: {name: "FDP", symbol: "fdp", assistantId: "asst_nWq7S82vXT6oKgih5oKiLbBH"},
+    gruene: {name: "Bündnis 90/Die Grünen", symbol: "gruene", assistantId: "asst_XseCMF4gCT42Jh23lXuAtZR2"},
+    spd: {name: "SPD", symbol: "spd", assistantId: "asst_c6v5qJauvXN21tOr76J2r1FZ"},
+}
+const supportedParties = Object.keys(parties) as Party[]
 
 async function generateThreadResponse(aiClient: AIClient, threadId: string, message: string): Promise<StreamingFunctionResponse> {
     await aiClient.beta.threads.messages.create(threadId, {role, content: message})
@@ -60,6 +63,8 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<A
             yield* processFunctionCalls(aiClient, encoder, event)
         } else if (event.event === "thread.message.delta") {
             yield* sendMessageDelta(encoder, event)
+        } else if (event.event === "thread.run.completed") {
+            console.log(`GPT 4o meta-run completed for. input-tokens: ${event.data.usage.prompt_tokens},  input-tokens: ${event.data.usage.completion_tokens}`)
         } else {
             console.log(`Event: ${event.event}`)
         }
@@ -69,6 +74,7 @@ async function* assistantStreamToSSE(aiClient: AIClient, stream: AsyncIterable<A
 type Query = {
     queriedParties: Party[]
     queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "inappropriate"
+    subPrompt: string
     followUpQuestions: string[]
 }
 
@@ -88,7 +94,7 @@ async function* processFunctionCalls(aiClient: AIClient, encoder: TextEncoder, e
         if (toolCall.function.name === "get_instructions") {
             console.log(toolCall.function.arguments)
             const query = JSON.parse(toolCall.function.arguments) as Query
-            const instruction = getInstructions(query)
+            const instruction = await getInstructions(aiClient, query)
             console.log(instruction.instruction)
             console.log(instruction.command)
             if (instruction.command === "partySelector") {
@@ -147,29 +153,27 @@ async function* sendEvent(encoder: TextEncoder, event: string, data: string): SS
     yield encoder.encode("\n")
 }
 
-function getInstructions(query: Query): Instruction {
+async function getInstructions(aiClient: AIClient, query: Query): Promise<Instruction> {
     switch (query.queryType) {
         case "program":
-            return detailedInstructions(query.queriedParties, true, `
-                Beantworte die Frage des Nutzer ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien.
-                Gib die relevanten Kernpunkte als kompakte Aufzählung aus.
+            return detailedInstructions(aiClient, query.subPrompt, query.queriedParties, true, `
+                Beantworte die Frage des Nutzer ausschließlich auf Basis der unten bereitgestellten Auszüge aus den Wahlprogrammen.
             `)
         case "partySearch":
-            return instruction("followUpQuestions", `
-                Nenne dem Nutzer die Parteien, die laut den Dir vorliegenden Wahlprogrammen die gefragten Positionen vertreten.
+            return detailedInstructions(aiClient, query.subPrompt, supportedParties, true, `
+                Nenne dem Nutzer die Parteien, die laut den unten bereitgestellten Auszügen der Wahlprogrammen die gefragten Positionen vertreten.
                 Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
             `)
         case "assessment":
-            return detailedInstructions(query.queriedParties, true, `
+            return detailedInstructions(aiClient, query.subPrompt, query.queriedParties, true, `
                 Nimm die angefragte Bewertung vor.
-                Gib die Kernpunkte der Bewertung als kompakte Aufzählung aus.
             `)
         case "quote":
-            return detailedInstructions(query.queriedParties, false, `
-                Zitiere die relevanten Ausschnitte ausschließlich auf Basis der Dir vorliegenden Wahlprogramme der Parteien. 
+            return detailedInstructions(aiClient, query.subPrompt, query.queriedParties, false, `
+                Zitiere die relevanten Ausschnitte ausschließlich auf Basis der unten bereitgestellten Auszüge der Wahlprogramme. 
             `)
         case "inquiry":
-            return detailedInstructions(query.queriedParties, true, `
+            return detailedInstructions(aiClient, query.subPrompt, query.queriedParties, true, `
                 Beantworte die Rückfrage des Nutzers.
             `)
         case "inappropriate":
@@ -177,14 +181,49 @@ function getInstructions(query: Query): Instruction {
     }
 }
 
-function detailedInstructions(parties: Party[], followUpQuestions: boolean, instruct: string): Instruction {
+async function detailedInstructions(
+    aiClient: AIClient,
+    prompt: string,
+    parties: Party[],
+    followUpQuestions: boolean,
+    instruct: string)
+: Promise<Instruction> {
     // No parties specified at all or too many parties specified
     if (parties.length === 0 || parties.length > maxNumberParties) {
         return instruction("partySelector", `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`)
     }
 
     // All requested parties are supported
-    return instruction(followUpQuestions ? "followUpQuestions" : undefined, instruct)
+    const manifestoContent = await getRequestedManifestoContent(aiClient, parties, prompt)
+    return instruction(followUpQuestions ? "followUpQuestions" : undefined, `${instruct}\n\n${manifestoContent}`)
+}
+
+async function getRequestedManifestoContent(aiClient: AIClient, parties: Party[], prompt: string): Promise<string> {
+    const content = await Promise.all(parties.map(party => getManifestoContent(aiClient, party, prompt)))
+    return content.join("\n\n")
+}
+
+async function getManifestoContent(aiClient: AIClient, party: Party, prompt: string): Promise<string> {
+    const thread = await aiClient.beta.threads.create({})
+    await aiClient.beta.threads.messages.create(thread.id, {role, content: prompt})
+    const stream = await aiClient.beta.threads.runs.create(thread.id, {
+        assistant_id: parties[party].assistantId,
+        tool_choice: "required",
+        stream: true,
+    })
+
+    let content = `# ${parties[party].name}\n`
+    for await (const event of stream) {
+        if (event.event === "thread.message.completed") {
+            const msg = event.data.content[0]
+            if (msg.type === "text") {
+                content += msg.text.value
+            }
+        } else if (event.event === "thread.run.completed") {
+            console.log(`GPT 4o-mini run completed for ${party}. input-tokens: ${event.data.usage.prompt_tokens},  input-tokens: ${event.data.usage.completion_tokens}`)
+        }
+    }
+    return content
 }
 
 const createThreadFunction = streamingAiFunction(createThread)
