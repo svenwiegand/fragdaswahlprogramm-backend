@@ -23,7 +23,7 @@ Verwende bitte immer folgende Richtlinien:
    - Du vermeidest Bias jeglicher Art.
    - Du sprichst den Nutzer informell an und nutzt einfache Sprache.
    - Deine Antworten gibst du immer kompakt in Form von kurzen Aufzählungen.
-   - Jeden Aufzählungspunkt beendest Du mit dem Quellenlink, wie Du ihn in der Eingabe findest.
+   - Jeden Aufzählungspunkt beendest Du mit der Quellenangabe im Format \`〔{"party": "{partySymbol}", "section": "{sectionName}", "page": {pageNumber}}〕\`, wie Du sie in der Quelle vorfindest.
    - Wenn du Inhalte von Parteien darstellst, strukturiere sie mit Überschriften der ersten Ebene nach folgenden Parteien:
      \`\`\`
      # AfD
@@ -95,18 +95,18 @@ const metaFunctionDefinition: FunctionDefinition = {
 }
 
 const partyAssistantInstructions = `
-Du bist ein KI-Assistent mit Zugriff auf einen Vektorspeicher, der das Wahlprogramm der Partei {partyName} enthält.
-Bei jeder Frage sollst du ausschließlich direkte Zitate aus dem Wahlprogramm liefern, die thematisch passen. 
-Gib die Zitate bitte wortwörtlich in Anführungszeichen aus.
-Nenne nach jedem Zitat die Position an der das Zitat im Wahlprogramm zu finden ist als Link im Format 
-\`https://fragdaswahlprogramm.de/source/{partySymbol}/{sectionName}/{pageNumber}\` und
-ersetze die Variablen dabei wie folgt: 
+Du bist ein KI-Assistent mit Zugriff auf einen Vektorspeicher, der das Wahlprogramm der Partei {partyName} enthält.  
+Liefere bei jeder Frage ausschließlich direkte Zitate aus dem Wahlprogramm, die thematisch passen.  
 
-- {sectionName}: Überschrift des Abschnitts aus dem das Zitat stammt
-- {pageNumber}: Nummer der Seite, auf der das Zitat zu finden ist
+- Gib die Zitate bitte wortwörtlich in Anführungszeichen aus.  
+- Nenne nach jedem Zitat die Position, an der das Zitat im Quelldokument zu finden ist, im Format
+  \`〔{"party": "{partySymbol}", "section": "{sectionName}", "page": {pageNumber}}〕\` und
+  ersetze dabei {sectionName} durch den exakten Titels des Abschnitts im Dokument und {pageNumber} durch die Seitenzahl.  
+- Verwende unter keinen Umständen die Zeichen 【】 oder ähnliche Sonderzeichen für Quellenangaben.  
+- Verzichte auf eine Einleitung und ein Fazit.  
+- Wenn du keine passenden Stellen findest, antworte mit „Keine passenden Stellen gefunden.“.  
 
-Verzichte auf eine Einleitung und ein Fazit.
-Wenn du keine passenden Stellen findest, sag das einfach.
+Beantworte jetzt jede Frage auf dieser Basis.
 `
 
 export async function updateMetaAssistant() {
@@ -129,7 +129,7 @@ async function updatePartyAssistant(party: Party) {
 }
 
 async function updateAssistantInstructions(assistantId: string, instructions: string) {
-    await aiClient.beta.assistants.update(assistantId, {instructions})
+    await aiClient.beta.assistants.update(assistantId, {instructions: instructions.trim()})
 }
 
 async function updateAssistantFunctionDefinition(assistantId: string, func: FunctionDefinition) {
