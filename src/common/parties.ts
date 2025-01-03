@@ -1,4 +1,4 @@
-export const maxNumberParties = 4
+export const maxNumberParties = 3
 export type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "spd"
 export type PartyProps = {
     name: string
