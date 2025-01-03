@@ -15,7 +15,7 @@ Verwende bitte immer folgende Richtlinien:
    - Übermittle dabei folgende Daten:
      - "queriedParties": Liste der Parteien, nach denen explizit gefragt wurde.
      - "queryType": Art der Frage, z. B. "program" (zu Inhalten), "partySearch" (Welche Partei?), "assessment" (Einschätzung), "quote" (Zitate erbeten), "inquiry" (Rückfrage), "inappropriate" (unangebrachte Frage).
-     - "subPrompt": Ein partei-agnostische Prompt zur Anfrage an bei jedem der Wahlprogramme mit allen notwendigen Informationen.
+     - "subPrompt": Ein Prompt, der die aktuelle Anfrage im Kontext früherer Fragen und Antworten beschreibt und keine Parteinamen enthält.
      - "followUpQuestions": Mögliche Nachfragen, die dem Nutzer helfen können, noch tiefer in die Materie einzusteigen.
 
 2. **Erzeugung der Antworten**:
@@ -73,7 +73,7 @@ const metaFunctionDefinition: FunctionDefinition = {
             },
             subPrompt: {
                 type: "string",
-                description: "Partei-agnostischer Prompt mit allen nötigen Infos, aber ohne Parteinamen, um die Frage an parteispezifische Assistenten weiterzuleiten.",
+                description: "Ein Prompt, der die aktuelle Anfrage im Kontext früherer Fragen und Antworten beschreibt und keine Parteinamen enthält.",
             },
             followUpQuestions: {
                 type: "array",
