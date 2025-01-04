@@ -1,11 +1,12 @@
 import {HttpRequest, HttpResponseInit, InvocationContext} from "@azure/functions"
 import {aiClient, AIClient} from "./ai-client"
+import {corsHeaders} from "./cors"
 
 const standardHeaders = {
     "Cache-Control": "no-cache",
     "Content-Type": "text/event-stream; charset=utf-8",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": "*", // required locally and ignored in production
+    ...corsHeaders, // required locally and ignored in production
 }
 
 export type  SSEStream = AsyncIterable<Uint8Array>

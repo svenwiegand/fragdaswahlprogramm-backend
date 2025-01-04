@@ -3,17 +3,11 @@ import {AIClient} from "./ai-client"
 import {SSEStream, StreamingFunctionResponse} from "./ai-function"
 import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
-import {RequiredActionFunctionToolCall, Run} from "openai/resources/beta/threads"
+import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
 import {maxNumberParties, parties, Party, supportedParties} from "./parties"
 import {metaAssistantId} from "./assistants"
-import {EventBuilder, getMixpanelEvent, getSessionId, MixpanelEvent, SessionID} from "./mixpanel"
-
-export const CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Expose-Headers": "Thread-ID",
-    "Access-Control-Allow-Headers": "Content-Type, Session-ID",
-}
+import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "./mixpanel"
 
 type Query = {
     queriedParties: Party[]
@@ -68,7 +62,6 @@ async function generateThreadResponse(
         stream: assistantStreamToSSE(aiClient, stream, trackingEvent),
         additionalHeaders: {
             "Thread-ID": threadId,
-            ...CORS_HEADERS,
         }
     }
 }
