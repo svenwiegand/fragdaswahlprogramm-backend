@@ -107,10 +107,10 @@ async function* assistantStreamToSSE(
         } else if (event.event === "thread.message.delta") {
             yield* sendMessageDelta(encoder, event)
         } else if (event.event === "thread.run.completed") {
-            console.log(`GPT 4o meta-run completed for. input-tokens: ${event.data.usage.prompt_tokens},  input-tokens: ${event.data.usage.completion_tokens}`)
+            console.log(`GPT meta-run completed for. input-tokens: ${event.data.usage.prompt_tokens},  input-tokens: ${event.data.usage.completion_tokens}`)
             finalizeAndSendThreadEvent(trackingEvent, event)
         } else if (event.event === "thread.run.failed") {
-            console.error(`GPT 4o meta-run failed: ${event.data.last_error.code} (${event.data.last_error.message})`)
+            console.error(`GPT meta-run failed: ${event.data.last_error.code} (${event.data.last_error.message})`)
             finalizeAndSendThreadEvent(trackingEvent, event)
         } else {
             console.log(`Event: ${event.event}`)
@@ -296,7 +296,7 @@ async function getManifestoContent(aiClient: AIClient, party: Party, prompt: str
         } else if (event.event === "thread.run.completed") {
             inputTokens = event.data.usage.prompt_tokens
             outputTokens = event.data.usage.completion_tokens
-            console.log(`GPT 4o-mini run completed for ${party}. input-tokens: ${inputTokens},  input-tokens: ${outputTokens}`)
+            console.log(`GPT mini run completed for ${party}. input-tokens: ${inputTokens},  input-tokens: ${outputTokens}`)
         }
     }
     return {content, inputTokens, outputTokens}
