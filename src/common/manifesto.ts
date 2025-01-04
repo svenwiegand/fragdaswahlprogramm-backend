@@ -13,6 +13,7 @@ type Query = {
     queriedParties: Party[]
     queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "inappropriate"
     subPrompt: string
+    category: string,
     followUpQuestions: string[]
 }
 
@@ -37,6 +38,7 @@ const initThreadEvent = (request: HttpRequest): ThreadEventBuilder => new EventB
     queriedParties: [],
     queryType: "program",
     subPrompt: "",
+    category: "",
     followUpQuestions: [],
     inputTokensStandard: 0,
     outputTokensStandard: 0,
