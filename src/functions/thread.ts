@@ -1,8 +1,8 @@
 import {app, HttpRequest, HttpResponseInit} from "@azure/functions"
 import {streamingAiFunction} from "../common/ai-function"
-import {createThread, postToThread} from '../manifesto/assistants'
 import {corsHeaders, corsOptionsHandler} from "../common/cors"
 import {aiClient} from "../common/ai-client"
+import {createOrPostToThread} from "../manifesto/assistant-meta"
 
 async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
     const threadId = request.params.threadId
@@ -17,8 +17,8 @@ async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
     }
 }
 
-const createThreadFunction = streamingAiFunction(createThread)
-const postToThreadFunction = streamingAiFunction(postToThread)
+const createThreadFunction = streamingAiFunction(createOrPostToThread)
+const postToThreadFunction = streamingAiFunction(createOrPostToThread)
 
 app.setup({enableHttpStream: true})
 app.http("getThread", {
