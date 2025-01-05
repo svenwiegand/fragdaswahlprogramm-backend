@@ -5,7 +5,7 @@ import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
 import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
-import {maxNumberParties, Party, parties} from "./parties"
+import {maxNumberParties, Party, parties, partyProps} from "./parties"
 import {metaAssistantId} from "./assistant-setup"
 import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "../common/mixpanel"
 
@@ -279,12 +279,12 @@ async function getManifestoContent(aiClient: AIClient, party: Party, prompt: str
     const thread = await aiClient.beta.threads.create({})
     await aiClient.beta.threads.messages.create(thread.id, {role, content: prompt})
     const stream = await aiClient.beta.threads.runs.create(thread.id, {
-        assistant_id: party[party].assistantId,
+        assistant_id: partyProps[party].assistantId,
         tool_choice: "required",
         stream: true,
     })
 
-    let content = `# ${party[party].name}\n`
+    let content = `# ${partyProps[party].name}\n`
     let inputTokens = 0
     let outputTokens = 0
     for await (const event of stream) {

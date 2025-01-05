@@ -1,5 +1,5 @@
 import OpenAI from "openai"
-import {party, Party} from "./parties"
+import {partyProps, Party} from "./parties"
 import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant-setup"
 import FunctionDefinition = OpenAI.FunctionDefinition
 
@@ -55,6 +55,7 @@ const metaFunctionDefinition: FunctionDefinition = {
                         "cdu-csu",
                         "fdp",
                         "gruene",
+                        "linke",
                         "spd",
                     ],
                 },
@@ -141,13 +142,13 @@ export async function updateMetaAssistant() {
 }
 
 export async function updatePartyAssistants() {
-    for (const p of Object.keys(party) as Party[]) {
-        await updatePartyAssistant(p)
+    for (const party of Object.keys(partyProps) as Party[]) {
+        await updatePartyAssistant(party)
     }
 }
 
 async function updatePartyAssistant(party: Party) {
-    const {symbol, name, assistantId} = party[party]
+    const {symbol, name, assistantId} = partyProps[party]
     const instructions = partyAssistantInstructions
         .replace(/{partySymbol}/g, symbol)
         .replace(/{partyName}/g, name)
