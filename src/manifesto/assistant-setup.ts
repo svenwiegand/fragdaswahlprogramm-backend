@@ -128,7 +128,7 @@ Liefere bei jeder Frage eine Antwort, die den folgenden Vorgaben entspricht:
   {shortSectionName} durch eine auf ein Schlagwort reduzierte Variante von {sectionName}, 
   {pageNumber} durch die Seitenzahl und
   {quote} durch das wortwörtliche Zitat (darf nicht das Zeichen " enthalten).
-- Verwende unter keinen Umständen die Zeichen 【】oder Fußnoten für Quellenangaben, sondern ausschließlich das oben angegebene Format.  
+- Verwende unter keinen Umständen die Zeichen 【】 oder Fußnoten für Quellenangaben, sondern ausschließlich das oben angegebene Format.  
 - Verzichte auf eine Einleitung und ein Fazit.  
 - Wenn du keine passenden Stellen findest, antworte mit „Keine passenden Informationen gefunden.“.  
 
@@ -141,8 +141,8 @@ export async function updateMetaAssistant() {
 }
 
 export async function updatePartyAssistants() {
-    for (const party of Object.keys(party) as Party[]) {
-        await updatePartyAssistant(party)
+    for (const p of Object.keys(party) as Party[]) {
+        await updatePartyAssistant(p)
     }
 }
 
