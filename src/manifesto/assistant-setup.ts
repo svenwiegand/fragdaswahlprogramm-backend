@@ -1,6 +1,6 @@
 import OpenAI from "openai"
 import {party, Party} from "./parties"
-import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant"
+import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant-setup"
 import FunctionDefinition = OpenAI.FunctionDefinition
 
 export const metaAssistantId = "asst_iDqo1jpKOaCxsWkqBDe45sO7"
