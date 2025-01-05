@@ -5,7 +5,7 @@ import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
 import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
-import {maxNumberParties, party, Party, parties} from "./parties"
+import {maxNumberParties, Party, parties} from "./parties"
 import {metaAssistantId} from "./assistant-setup"
 import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "../common/mixpanel"
 
