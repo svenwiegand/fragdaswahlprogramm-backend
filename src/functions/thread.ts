@@ -1,12 +1,33 @@
-import {app, FunctionResult, HttpRequest, InvocationContext} from "@azure/functions"
+import {app, HttpRequest, HttpResponseInit} from "@azure/functions"
 import {streamingAiFunction} from "../common/ai-function"
 import {createThread, postToThread} from '../common/manifesto'
-import {corsOptionsHandler} from "../common/cors"
+import {corsHeaders, corsOptionsHandler} from "../common/cors"
+import {aiClient} from "../common/ai-client"
+
+async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
+    const threadId = request.params.threadId
+    const messages = await aiClient.beta.threads.messages.list(threadId)
+    return {
+        status: 200,
+        headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+        },
+        body: JSON.stringify(messages.data),
+    }
+}
 
 const createThreadFunction = streamingAiFunction(createThread)
 const postToThreadFunction = streamingAiFunction(postToThread)
 
 app.setup({enableHttpStream: true})
+app.http("getThread", {
+    methods: ["GET"],
+    authLevel: "anonymous",
+    route: "thread/{threadId}",
+    handler: getThread,
+})
+
 app.http("createThread", {
     methods: ["POST"],
     authLevel: "anonymous",
