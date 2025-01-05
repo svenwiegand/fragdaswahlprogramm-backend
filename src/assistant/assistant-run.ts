@@ -177,7 +177,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         )
         const events = results.filter(result => !!result.events).flatMap(result => result.events)
         const delegateAssistants = results.filter(result => !!result.delegateAssistants).flatMap(result => result.delegateAssistants)
-        console.log(`functions submitted with ${events.length} and ${delegateAssistants.length} delegate assistants`)
+        console.log(`functions submitted with ${events.length} events and ${delegateAssistants.length} delegate assistants`)
         return {stream, events, delegateAssistants}
     }
 
@@ -206,6 +206,9 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
                 ...remaining,
             } as unknown as Partial<Result>))
             console.log(`Delegate completed with ${result}`)
+            if (result === "failure") {
+                console.error(`Delegate failed with error: ${errorCode}: ${errorMessage}`)
+            }
             await this.aiClient.beta.threads.messages.create(this.threadId, {role: "assistant", content})
         }
         for await (const assistant of assistants) {

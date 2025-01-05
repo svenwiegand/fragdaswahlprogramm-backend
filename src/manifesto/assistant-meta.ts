@@ -18,7 +18,7 @@ import {getMixpanelEvent, mixpanel} from "../common/mixpanel"
 
 type Query = {
     queriedParties: Party[]
-    queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "inappropriate"
+    queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "smallTalk" | "inappropriate"
     subPrompt: string
     category: string,
     followUpQuestions: string[]
@@ -48,29 +48,42 @@ class MetaAssistantRun extends AssistantRun<Result> {
 
     private async getInstructions(toolCallId: string, query: Query): Promise<ToolFunctionResult> {
         console.log("getInstructions")
-        this.updateResult(_ => query)
+        this.updateResult(prev => {
+            return {
+                queriedParties: [...prev.queriedParties, ...query.queriedParties],
+                queryType: query.queryType,
+                subPrompt: query.subPrompt,
+                category: query.category,
+                followUpQuestions: query.followUpQuestions,
+            }
+        })
         switch (query.queryType) {
             case "program":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, true, `
-                Antworte dem Nutzer ausschließlich mit "Hier Deine Antwort:"!
+                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
+                Antworte mit "Hier die Antwort:"
             `)
             case "partySearch":
-                return this.detailedInstructions(toolCallId, query.subPrompt, parties, true, `
+                return this.detailedInstructions(toolCallId, query.subPrompt, parties, query.followUpQuestions, `
                 Nenne dem Nutzer die Parteien, die laut den unten bereitgestellten Auszügen der Wahlprogrammen die gefragten Positionen vertreten.
                 Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
             `)
             case "assessment":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, true, `
+                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
                 Nimm die angefragte Bewertung vor.
             `)
             case "quote":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, false, `
+                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, undefined, `
                 Zitiere die relevanten Ausschnitte ausschließlich auf Basis der unten bereitgestellten Auszüge der Wahlprogramme. 
             `)
             case "inquiry":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, true, `
+                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
                 Beantworte die Rückfrage des Nutzers.
             `)
+            case "smallTalk":
+                return {
+                    toolCallId,
+                    output: "Antworte dem Nutzer!"
+                }
             case "inappropriate":
                 return {
                     toolCallId,
@@ -83,20 +96,16 @@ class MetaAssistantRun extends AssistantRun<Result> {
         toolCallId: string,
         prompt: string,
         parties: Party[],
-        followUpQuestions: boolean,
+        followUpQuestions: string[] | undefined,
         instruct: string
     ): Promise<ToolFunctionResult> {
-        const command = (command: Command) => {
-            this.updateResult(_ => ({command}))
-            return {event: "command", data: command}
-        }
-
         // No parties specified at all or too many parties specified
         if (parties.length === 0 || parties.length > maxNumberParties) {
+            this.updateResult(_ => ({command: "partySelector"}))
             return {
                 toolCallId,
                 output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
-                events: [command("partySelector")],
+                events: [{event: "command", data: "selectParties"}],
             }
         }
 
@@ -108,7 +117,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         return {
             toolCallId,
             output: `${instruct}`,
-            events: followUpQuestions ? [command("followUpQuestions")] : undefined,
+            events: followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : undefined,
             delegateAssistants: partyAssistants
         }
     }
@@ -139,6 +148,7 @@ async function runAssistant(aiClient: AIClient, threadId: string | undefined, me
 }
 
 async function sendMixpanelEvent(result: AssistantRunResult, request: HttpRequest) {
+    console.log(`meta assistant finished with these results:\n${JSON.stringify(result, null, 2)}`)
     mixpanel.track("Question Processed", {
         ...result,
         ...getMixpanelEvent(request)
