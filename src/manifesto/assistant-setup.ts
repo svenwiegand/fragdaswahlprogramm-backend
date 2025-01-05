@@ -1,7 +1,7 @@
-import {aiClient} from "./ai-client"
 import OpenAI from "openai"
-import FunctionDefinition = OpenAI.FunctionDefinition
 import {parties, Party} from "./parties"
+import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant"
+import FunctionDefinition = OpenAI.FunctionDefinition
 
 export const metaAssistantId = "asst_iDqo1jpKOaCxsWkqBDe45sO7"
 
@@ -152,17 +152,4 @@ async function updatePartyAssistant(party: Party) {
         .replace(/{partySymbol}/g, symbol)
         .replace(/{partyName}/g, name)
     await updateAssistantInstructions(assistantId, instructions)
-}
-
-async function updateAssistantInstructions(assistantId: string, instructions: string) {
-    await aiClient.beta.assistants.update(assistantId, {instructions: instructions.trim()})
-}
-
-async function updateAssistantFunctionDefinition(assistantId: string, func: FunctionDefinition) {
-    await aiClient.beta.assistants.update(assistantId, {
-        tools: [{
-            type: "function",
-            function: func,
-        }],
-    })
 }

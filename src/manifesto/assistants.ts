@@ -1,13 +1,13 @@
 import {HttpRequest} from "@azure/functions"
-import {AIClient} from "./ai-client"
-import {SSEStream, StreamingFunctionResponse} from "./ai-function"
+import {AIClient} from "../common/ai-client"
+import {SSEStream, StreamingFunctionResponse} from "../common/ai-function"
 import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
 import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
 import {maxNumberParties, parties, Party, supportedParties} from "./parties"
-import {metaAssistantId} from "./assistants"
-import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "./mixpanel"
+import {metaAssistantId} from "./assistant-setup"
+import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "../common/mixpanel"
 
 type Query = {
     queriedParties: Party[]

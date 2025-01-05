@@ -1,5 +1,5 @@
 import {app, HttpResponseInit} from "@azure/functions"
-import {updateMetaAssistant, updatePartyAssistants} from "../common/assistants"
+import {updateMetaAssistant, updatePartyAssistants} from "../manifesto/assistant-setup"
 
 async function updateAssistants(): Promise<HttpResponseInit> {
     try {

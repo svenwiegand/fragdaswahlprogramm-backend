@@ -1,6 +1,6 @@
 import {app, HttpRequest, HttpResponseInit} from "@azure/functions"
 import {streamingAiFunction} from "../common/ai-function"
-import {createThread, postToThread} from '../common/manifesto'
+import {createThread, postToThread} from '../manifesto/assistants'
 import {corsHeaders, corsOptionsHandler} from "../common/cors"
 import {aiClient} from "../common/ai-client"
 
