@@ -5,7 +5,7 @@ import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
 import {RequiredActionFunctionToolCall} from "openai/resources/beta/threads"
 import {AssistantStream} from "openai/lib/AssistantStream"
-import {maxNumberParties, parties, Party, supportedParties} from "./parties"
+import {maxNumberParties, party, Party, parties} from "./parties"
 import {metaAssistantId} from "./assistant-setup"
 import {EventBuilder, getMixpanelEvent, MixpanelEvent} from "../common/mixpanel"
 
@@ -217,7 +217,7 @@ async function getInstructions(aiClient: AIClient, query: Query): Promise<Instru
                 Beantworte die Frage des Nutzer ausschließlich auf Basis der unten bereitgestellten Auszüge aus den Wahlprogrammen.
             `)
         case "partySearch":
-            return detailedInstructions(aiClient, query.subPrompt, supportedParties, true, `
+            return detailedInstructions(aiClient, query.subPrompt, parties, true, `
                 Nenne dem Nutzer die Parteien, die laut den unten bereitgestellten Auszügen der Wahlprogrammen die gefragten Positionen vertreten.
                 Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
             `)
@@ -279,12 +279,12 @@ async function getManifestoContent(aiClient: AIClient, party: Party, prompt: str
     const thread = await aiClient.beta.threads.create({})
     await aiClient.beta.threads.messages.create(thread.id, {role, content: prompt})
     const stream = await aiClient.beta.threads.runs.create(thread.id, {
-        assistant_id: parties[party].assistantId,
+        assistant_id: party[party].assistantId,
         tool_choice: "required",
         stream: true,
     })
 
-    let content = `# ${parties[party].name}\n`
+    let content = `# ${party[party].name}\n`
     let inputTokens = 0
     let outputTokens = 0
     for await (const event of stream) {
