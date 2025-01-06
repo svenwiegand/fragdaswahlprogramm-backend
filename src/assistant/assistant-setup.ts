@@ -6,11 +6,8 @@ export async function updateAssistantInstructions(assistantId: string, instructi
     await aiClient.beta.assistants.update(assistantId, {instructions: instructions.trim()})
 }
 
-export async function updateAssistantFunctionDefinition(assistantId: string, func: FunctionDefinition) {
+export async function updateAssistantFunctionDefinition(assistantId: string, funcs: FunctionDefinition[]) {
     await aiClient.beta.assistants.update(assistantId, {
-        tools: [{
-            type: "function",
-            function: func,
-        }],
+        tools: funcs.map(f => ({type: "function", function: f})),
     })
 }

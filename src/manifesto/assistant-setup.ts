@@ -1,171 +1,216 @@
 import OpenAI from "openai"
-import {partyProps, Party} from "./parties"
+import {partyProps, Party, maxNumberParties} from "./parties"
 import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant-setup"
 import FunctionDefinition = OpenAI.FunctionDefinition
 
-export const metaAssistantId = "asst_iDqo1jpKOaCxsWkqBDe45sO7"
+export const metaAssistantId = "asst_PUwOsg3hTIjlOWNlJXAsMqHc"
+
+const category = {
+    type: "string",
+    enum: [
+        "Wirtschaft & Finanzen",
+        "Arbeit & Soziales",
+        "Bildung & Forschung",
+        "Gesundheit & Pflege",
+        "Familie & Gesellschaft",
+        "Umwelt & Klima",
+        "Migration & Integration",
+        "Außenpolitik",
+        "Innere Sicherheit",
+        "Verkehr & Infrastruktur",
+        "Digitalisierung & Technologie",
+        "Europa",
+        "Demokratie & Rechtsstaat",
+        "Innovation & Zukunft",
+    ],
+        description: "Kategorie der Anfrage",
+}
+const followUpQuestions = {
+    type: "array",
+        items: {
+        type: "string",
+    },
+    description: "Liste sinnvoller Folgefragen, die für ein tiefergehendes Verständnis relevant sein können. Keine Vergleiche unter den Parteien.",
+}
+const parties = {
+    type: "array",
+        items: {
+        type: "string",
+        enum: Object.keys(partyProps),
+    },
+    description: "Liste der Parteien, auf die sich die Anfrage bezieht.",
+}
+const minimalPrompt = {
+    type: "string",
+    description: "Kurzer, prägnanter Prompt, der die Anfrage vollständig beschreibt.",
+}
+
+const partyNames = Object.keys(partyProps).map(p => `${partyProps[p].name} (${p})`).join(", ")
+const refFormat = `\`〔{"party": "{partySymbol}", "section": "{sectionName}", "shortSection": "{shortSectionName}", "page": {pageNumber}}〕\``
+
 
 const metaInstructions = `
-Du bist ein Assistent, der Anfragen zu den Wahlprogrammen deutscher Parteien zur Bundestagswahl 2025 entgegennimmt und verarbeitet. 
-Deine Hauptaufgabe ist, die Funktion "get_instructions" aufzurufen, um Anweisungen zur Bearbeitung der Anfrage zu erhalten. 
-Befolge die folgenden Richtlinien strikt:
+Du bist ein Assistent, der Anfragen zu den Wahlprogrammen deutscher Parteien zur Bundestagswahl 2025 entgegennimmt und verarbeitet.
+Du kennst ausschließlich die Wahlprogramme folgender Parteien: ${partyNames}.
 
 # 1. Sammlung von Informationen
-Analysiere den bisherigen Verlauf auf Hinweise, ob bereits alle notwendigen Informationen zur Beantwortung der Anfrage verfügbar sind.
+- Analysiere den bisherigen Verlauf auf Hinweise, ob bereits alle notwendigen Informationen zur Beantwortung der Anfrage verfügbar sind.
+- Ermittle ob Du alle notwendigen Informationen zur Beantwortung der Frage hast.
+- Beantworte Fragen zu den Positionen der Parteien und den Inhalten ihrer Wahlprogramme ausschließlich auf Basis der Informationen aus "getManifestoExtract" oder dem bisherigen Kontext der Unterhaltung.
+- Ermittle aus der Anfrage und dem bisherigen Verlauf, an welche Parteien sich die Anfrage richtet.
 
-# 2. Ermittlung des Anfragetyps
-Ermittle zunächst den Typ der Anfrage und wähle den ersten zutreffenden Typ aus der folgenden Liste: 
+# 2. Ermittlung der aufzurufenden Funktion
+Du musst bei jeder Anfrage exakt eine der folgenden Funktionen aufrufen:
 
-- 'inquiry_noInformationRequired': Die Anfrage ist eine Rückfrage zu früheren Antworten, und alle notwendigen Informationen sind bereits im bisherigen Kontext der Unterhaltung vorhanden.
-- 'inquiry_informationRequired': Die Anfrage ist eine Rückfrage zu früheren Antworten, erfordert jedoch neue Informationen aus den Wahlprogrammen.
-- 'partySearch': Die Anfrage zielt darauf ab, eine Liste von Parteien zu erhalten, die eine bestimmte Position vertreten oder Maßnahmen planen. Es wurde nicht konkret nach Inhalten gefragt. Es wurden keine spezifischen Parteien in der Anfrage genannt.
-- 'program': Die Anfrage betrifft allgemeine Informationen oder Inhalte der Wahlprogramme.
-- 'smallTalk': Die Anfrage ist eine Begrüßung oder allgemeine Unterhaltung ohne Bezug zu Wahlprogrammen.
-- 'inappropriate': Die Anfrage ist unangemessen oder unpassend.
+- 'findParties': Der Nutzer sucht nach Parteien, die eine bestimmte Position vertreten oder Maßnahme planen und du benötigst die dazu passenden Informationen aus den Wahlprogrammen.
+- 'getManifestoExtract': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme konkreter Parteien, die nicht aus den verfügbaren Informationen hervorgehen.
+- 'selectParties': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme, es ist aber nicht ersichtlich für welche Parteien die Frage beantwortet werden soll oder es werden mehr als ${maxNumberParties} angefragt.
+- 'sendRequestInfo': Du hast alle notwendigen Informationen und kannst die Anfrage beantworten.
 
 Hinweis: Wenn mehrere Typen zutreffen könnten, priorisiere in folgender Reihenfolge:
-inquiry_noInformationRequired > inquiry_informationRequired > partySearch > program > smallTalk > inappropriate
+getManifestoExtract > sendRequestInfo > selectParties > findParties
 
-# 3. Ermittlung der Parteien
-Ermittle aus der Anfrage und dem bisherigen Verlauf, an welche Parteien sich die Anfrage richtet.
+# 3. Generierung des minimalen Prompts
+Einige der Funktionen erwarten den "minimalPrompt" als Parameter.
 
-# 4. Generierung des generischen Prompts
-- Erstelle einen parteiunabhänigen Prompt und übergib ihn als "subPrompt" an "get_instructions". 
-- Der Prompt muss die aktuelle Anfrage im Kontext früherer Fragen und Antworten beschreiben.
+- Der Prompt muss die aktuelle Anfrage im Kontext früherer Fragen und Antworten vollständig beschreiben.
 - Der Prompt darf keine Parteinamen enthalten und richtet sich allgemein an "die Partei".  
 
-# 5. Beispiele
+# 4. Beispiele
 - Anfrage: "Welche Partei setzt sich für ein Tempolimit ein?"
-    - queryType: partySearch
-    - parties: []
-    - subPrompt: "Setzt die Partei sich für ein Tempolimit ein?"
+    - Funktion: findParties (Begründung: Der Nutzer sucht nach Parteien, die ein Tempolimit fordern)
+    - minimalPrompt: "Setzt die Partei sich für ein Tempolimit ein?"
 - Anfrage: "Was planen die Parteien im Bereich Bildung?"
-    -queryType: program
-    - parties: []
-    - subPrompt: "Was plant die Partei im Bereich Bildung?"
+    - Funktion: selectParties (Begründung: Der Nutzer fragt nach konkreten Inhalten, nennt aber nicht die Parteien)
+    - minimalPrompt: "Was plant die Partei im Bereich Bildung?"
 - Anfrage: "Was planen CDU und FDP zur Rente?"
-    - queryType: program
+    - Funktion: getManifestoExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme für konkrete Parteien)
     - parties: ['cdu-csu', 'fdp']
-    - subPrompt: "Was plant die Partei zur Rente?"
+    - minimalPrompt: "Was plant die Partei zur Rente?"
 - Anfrage: "Worin unterscheiden sich die Positionen der beiden?"
-    - queryType: 'inquiry_noInformationRequired'
+    - Funktion: sendRequestInfo (Begründung: Aufgrund des Unterhaltungsverlaufs ist klar, um welche Parteien es geht und alle Informationen sind verfügbar)
     - parties: ['cdu-csu', 'fdp']
-    - subPrompt: "Was ist die Position der Partei zur Rente?"
+    - minimalPrompt: "Was ist die Position der Partei zur Rente?"
 - Anfrage: "Wie unterscheidet sich die Position der beiden Parteien im Bereich Pflege?"
-    - queryType: 'inquiry_informationRequired'
+    - Funktion: getManifestoExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme zu einem anderen Thema und wir wissen um welche Parteien es geht)
     - parties: ['cdu-csu', 'fdp']
-    - subPrompt: "Was ist die Position der Partei zur Pflege?"
+    - minimalPrompt: "Was ist die Position der Partei zur Pflege?"
 - Anfrage: "Wie steht die SPD zum Klimaschutz?"
-    - queryType: 'program'
+    - queryType: getManifestoExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme zu einer genannten Partei)
     - parties: ['spd']
-    - subPrompt: "Wie steht die Partei zum Klimaschutz?"
+    - minimalPrompt: "Wie steht die Partei zum Klimaschutz?"
 - Anfrage: "Wie beurteilst Du diese Position?"
-    - queryType: 'inquiry_noInformationRequired'
+    - queryType: 'sendRequestInfo' (Begründung: Alle notwendigen Informationen sind aufgrund der bisherigen Unterhaltung verfügbar)
     - parties: ['spd'] 
-    - subPrompt: "Was ist die Position der Partei zum Klimaschutz?"
+    - minimalPrompt: "Was ist die Position der Partei zum Klimaschutz?"
 
-# 6. Verhalten
-- Ruf bei jeder Anfrage exakt einmal die Funktion "get_instructions" und nutze dabei die unter 2., 3. und 4. ermittelten Parameter. 
-- Rufe "get_instructions" *immer* exakt einmal auf, auch wenn mehrere Parteien angefragt werden.
+# 5. Verhalten
+- Werte die Informationen aus der Anfrage und der bisherigen Unterhaltung aus. 
+- Rufe die eine am besten passende Funktion auf.
+- Generiere die antwort.
 
-# 7. Ausgabe
-- Erzeuge die Ausgabe nach den Anweisungen, die Du von "get_instructions" erhältst.
-- Du antwortest ausschließlich auf Basis der Informationen, die Du von "get_instructions" erhältst oder die du in der bisherigen Unterhaltung findest und nutzt dein implizites Wissen ausschließlich, wenn du von "get_instructions" dazu aufgefordert wirst..
+# 6. Ausgabe
 - Deine Antworten gibst du immer kompakt in Form von kurzen Aufzählungen.
+- Füge am Ende jedes Aufzählungspunkts eine Quellenangaben im Format ${refFormat} hinzu, sofern Du in der Eingabe eine findest.
+- Quellenangaben in der Form 【...】 ignorierst Du.
 - Du vermeidest Bias jeglicher Art.
 - Du sprichst den Nutzer informell an und nutzt einfache Sprache.
-- Vorschläge für Folgefragen übergibst Du ausschließlich an die Funktion 'get_instructions', fügst sie aber *nicht* zur Ausgabe hinzu.
+- Vorschläge für Folgefragen übergibst Du ausschließlich an die Funktionen, fügst sie aber *nicht* zur Ausgabe hinzu.
+
+# 7. Hinweise zur Robustheit
+- Wenn von "die Grünen" oder "den Grünen" gesprochen wird ist damit die Partei "Bündnis 90/Die Grünen" gemeint.
 `
-const metaFunctionDefinition: FunctionDefinition = {
-    name: "get_instructions",
-    description: "Liefert Instruktionen, wie mit der aktuellen Nutzeranfrage zu verfahren ist.",
-    parameters: {
-        type: "object",
-        properties: {
-            queriedParties: {
-                type: "array",
-                items: {
-                    type: "string",
-                    enum: [
-                        "afd",
-                        "cdu-csu",
-                        "fdp",
-                        "gruene",
-                        "linke",
-                        "spd",
-                    ],
-                },
-                description: "Liste der angefragten Parteien. Siehe Prompt für Details.",
+const metaFunctionDefinitions: FunctionDefinition[] = [
+    {
+        name: "findParties",
+        description: "Liefert die Informationen, welche Parteien eine bestimmte Position vertreten oder Maßnahme planen.",
+        parameters: {
+            type: "object",
+            properties: {
+                minimalPrompt,
+                category,
+                followUpQuestions,
             },
-            queryType: {
-                type: "string",
-                enum: [
-                    "inquiry_noInformationRequired",
-                    "inquiry_informationRequired",
-                    "partySearch",
-                    "program",
-                    "smallTalk",
-                ],
-                description: "Typ der Anfrage. Siehe Prompt für Details.",
-            },
-            subPrompt: {
-                type: "string",
-                description: "Siehe Prompt für Details.",
-            },
-            category: {
-                type: "string",
-                enum: [
-                    "Wirtschaft & Finanzen",
-                    "Arbeit & Soziales",
-                    "Bildung & Forschung",
-                    "Gesundheit & Pflege",
-                    "Familie & Gesellschaft",
-                    "Umwelt & Klima",
-                    "Migration & Integration",
-                    "Außenpolitik",
-                    "Innere Sicherheit",
-                    "Verkehr & Infrastruktur",
-                    "Digitalisierung & Technologie",
-                    "Europa",
-                    "Demokratie & Rechtsstaat",
-                    "Innovation & Zukunft",
-                ],
-                description: "Kategorie der Anfrage",
-            },
-            followUpQuestions: {
-                type: "array",
-                items: {
-                    type: "string",
-                },
-                description: "Liste sinnvoller Folgefragen, die für ein tiefergehendes Verständnis relevant sein können.",
-            },
+            required: [
+                "minimalPrompt",
+                "category",
+                "followUpQuestions"
+            ],
+            additionalProperties: false,
         },
-        required: [
-            "queriedParties",
-            "queryType",
-            "subPrompt",
-            "category",
-            "followUpQuestions",
-        ],
-        additionalProperties: false,
+        strict: true,
     },
-    strict: true,
-}
+    {
+        name: "selectParties",
+        description: "Fordert den Nutzer zur Auswahl von Parteien auf.",
+        parameters: {
+            type: "object",
+            properties: {
+            },
+            required: [
+            ],
+            additionalProperties: false,
+        },
+        strict: true,
+    },
+    {
+        name: "getManifestoExtract",
+        description: "Liefert relevante Informationen aus dem Wahlprogramm ein oder mehrerer Parteien",
+        parameters: {
+            type: "object",
+            properties: {
+                parties,
+                minimalPrompt,
+                category,
+                followUpQuestions,
+            },
+            required: [
+                "parties",
+                "minimalPrompt",
+                "category",
+                "followUpQuestions",
+            ],
+            additionalProperties: false,
+        },
+        strict: true,
+    },
+    {
+        name: "sendRequestInfo",
+        description: "Wird aufgerufen, wenn keine der anderen Funktionen zutrifft, um der App Informationen zur Anfrage bereitzustellen.",
+        parameters: {
+            type: "object",
+            properties: {
+                parties,
+                minimalPrompt,
+                category,
+                followUpQuestions,
+            },
+            required: [
+                "parties",
+                "minimalPrompt",
+                "category",
+                "followUpQuestions",
+            ],
+            additionalProperties: false,
+        },
+        strict: true,
+    },
+]
 
 const partyAssistantInstructions = `
 Du bist ein KI-Assistent mit Zugriff auf das Wahlprogramm der Partei {partyName}.  
 Liefere bei jeder Frage eine Antwort, die den folgenden Vorgaben entspricht:
  
 - Beginne die Ausgabe immer mit einer Überschrift der ersten Ebene und dem Parteinamen: \`# {partyName}\`
-- Ignoriere in der Anfrage enthaltene Parteinamen und beziehe dich ausschließlich auf das Wahlprogramm der Partei {partyName}.
+- Ignoriere in der Anfrage enthaltene Parteinamen und beziehe dich immer auf das Wahlprogramm der Partei {partyName}.
 - Beantworte die Frage ausschließlich basierend auf dem Dir vorliegenden Wahlprogramm.
 - Fasse die Erkenntnisse kompakt in kurzen Aufzählungen zusammen.
 - Füge jedem Aufzählungspunkt einen Verweise auf die relevante Stelle im Wahlprogramm im folgenden Format hinzu:
-  \`〔{"party": "{partySymbol}", "section": "{sectionName}", "shortSection": "{shortSectionName}", "page": {pageNumber}, "quote": {quote}}〕\` und
-  ersetze dabei {sectionName} durch den exakten Titels des Abschnitts im Dokument (darf nicht das Zeichen " enthalten), 
-  {shortSectionName} durch eine auf ein Schlagwort reduzierte Variante von {sectionName}, 
-  {pageNumber} durch die Seitenzahl und
-  {quote} durch das wortwörtliche Zitat (darf nicht das Zeichen " enthalten).
+  ${refFormat}
+  Ersetze die Variablen dabei durch folgende Werte: 
+  - {sectionName}: exakter Titel des Abschnitts im Dokument (darf nicht das Zeichen " enthalten) 
+  - {shortSectionName}: eine auf ein Schlagwort reduzierte Variante von "{sectionName}" 
+  - {pageNumber}: Seitenzahl des Treffers
 - Verwende unter keinen Umständen die Zeichen 【】 oder Fußnoten für Quellenangaben, sondern ausschließlich das oben angegebene Format.  
 - Verzichte auf eine Einleitung und ein Fazit.  
 - Wenn du keine passenden Stellen findest, antworte mit "Im {partyManifesto} habe ich nichts dazu gefunden".  
@@ -175,7 +220,7 @@ Beantworte jetzt jede Frage auf dieser Basis.
 
 export async function updateMetaAssistant() {
     await updateAssistantInstructions(metaAssistantId, metaInstructions)
-    await updateAssistantFunctionDefinition(metaAssistantId, metaFunctionDefinition)
+    await updateAssistantFunctionDefinition(metaAssistantId, metaFunctionDefinitions)
 }
 
 export async function updatePartyAssistants() {
