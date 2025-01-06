@@ -153,11 +153,11 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
 
     private onFinalEvent(event: AssistantStreamEvent.ThreadRunCompleted | AssistantStreamEvent.ThreadRunFailed | AssistantStreamEvent.ThreadRunCancelled): void {
         const safeDuration = (start: number | null, end: number | null): number | undefined => start && end ? end - start : undefined
-        this.updateResult(_ => ({
-            inputTokensStandard: this.model === "standard" ? event.data.usage.prompt_tokens : 0,
-            outputTokensStandard: this.model === "standard" ? event.data.usage.completion_tokens : 0,
-            inputTokensMini: this.model === "mini" ? event.data.usage.prompt_tokens : 0,
-            outputTokensMini: this.model === "mini" ? event.data.usage.completion_tokens : 0,
+        this.updateResult(prev => ({
+            inputTokensStandard: prev.inputTokensStandard + (this.model === "standard" ? event.data.usage.prompt_tokens : 0),
+            outputTokensStandard: prev.outputTokensStandard + (this.model === "standard" ? event.data.usage.completion_tokens : 0),
+            inputTokensMini: prev.inputTokensMini + (this.model === "mini" ? event.data.usage.prompt_tokens : 0),
+            outputTokensMini: prev.outputTokensMini + (this.model === "mini" ? event.data.usage.completion_tokens : 0),
             result: event.event === "thread.run.completed" ? "success" : "failure",
             duration: safeDuration(event.data.created_at, event.data.completed_at ?? event.data.failed_at ?? event.data.cancelled_at),
             errorCode: event.data.last_error?.code,
