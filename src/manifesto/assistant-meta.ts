@@ -9,7 +9,7 @@ import {
 } from "../assistant/assistant-run"
 import {AIClient} from "../common/ai-client"
 import {metaAssistantId} from "./assistant-setup"
-import {maxNumberParties, parties, Party, partyProps} from "./parties"
+import {maxNumberParties, Party, partyProps} from "./parties"
 import {createPartyAssistantRun} from "./assistant-party"
 import {HttpRequest} from "@azure/functions"
 import {StreamingFunctionResponse} from "../common/ai-function"
@@ -18,7 +18,7 @@ import {getMixpanelEvent, mixpanel} from "../common/mixpanel"
 
 type Query = {
     queriedParties: Party[]
-    queryType: "program" | "partySearch" | "assessment" | "quote" | "inquiry" | "smallTalk" | "inappropriate"
+    queryType: "program" | "partySearch" | "inquiry_noInformationRequired" | "inquiry_informationRequired" | "smallTalk" | "inappropriate"
     subPrompt: string
     category: string,
     followUpQuestions: string[]
@@ -35,8 +35,8 @@ class MetaAssistantRun extends AssistantRun<Result> {
         get_instructions: this.getInstructions.bind(this),
     }
 
-    constructor(aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) {
-        super(aiClient, threadId, stream, model, {
+    constructor(name: string | undefined, aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) {
+        super(name, aiClient, threadId, stream, model, {
             ...initialAssistantRunResult,
             queriedParties: [],
             queryType: "program",
@@ -46,61 +46,61 @@ class MetaAssistantRun extends AssistantRun<Result> {
         })
     }
 
-    private async getInstructions(toolCallId: string, query: Query): Promise<ToolFunctionResult> {
+    private async getInstructions(
+        toolCallId: string,
+        {queriedParties, queryType, followUpQuestions, category, subPrompt}: Query
+    ): Promise<ToolFunctionResult> {
         console.log("getInstructions")
-        this.updateResult(prev => {
-            return {
-                queriedParties: [...prev.queriedParties, ...query.queriedParties],
-                queryType: query.queryType,
-                subPrompt: query.subPrompt,
-                category: query.category,
-                followUpQuestions: query.followUpQuestions,
-            }
-        })
-        switch (query.queryType) {
-            case "program":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
-                Antworte mit "Hier die Antwort:"
-            `)
+        this.updateResult(prev => ({
+            queriedParties: [...prev.queriedParties, ...queriedParties],
+            queryType,
+            subPrompt,
+            category,
+            followUpQuestions,
+        }))
+
+        switch (queryType) {
             case "partySearch":
-                return this.detailedInstructions(toolCallId, query.subPrompt, parties, query.followUpQuestions, `
+                return this.functionOutput("partyInput", {toolCallId, subPrompt, followUpQuestions, queriedParties, ignorePartyLimits: true}, `
                 Nenne dem Nutzer die Parteien, die laut den unten bereitgestellten Auszügen der Wahlprogrammen die gefragten Positionen vertreten.
                 Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
             `)
-            case "assessment":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
-                Nimm die angefragte Bewertung vor.
-            `)
-            case "quote":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, undefined, `
-                Zitiere die relevanten Ausschnitte ausschließlich auf Basis der unten bereitgestellten Auszüge der Wahlprogramme. 
-            `)
-            case "inquiry":
-                return this.detailedInstructions(toolCallId, query.subPrompt, query.queriedParties, query.followUpQuestions, `
-                Beantworte die Rückfrage des Nutzers.
+            case "inquiry_noInformationRequired":
+                return this.functionOutput("instructionOnly", {toolCallId},
+                    "Antworte dem Nutzer auf Basis der Informationen aus dem Verlauf der Unterhaltung!"
+                )
+            case "inquiry_informationRequired":
+                return this.functionOutput("partyInput", {toolCallId, subPrompt, queriedParties, followUpQuestions}, `
+                Nenne dem Nutzer die Parteien, die laut den unten bereitgestellten Auszügen der Wahlprogrammen die gefragten Positionen vertreten.
+                Führe die zur Position gehörenden Kernpunkte als kompakte Aufzählung auf.
             `)
             case "smallTalk":
-                return {
-                    toolCallId,
-                    output: "Antworte dem Nutzer!"
-                }
+                return this.functionOutput("instructionOnly", {toolCallId}, "Antworte dem Nutzer")
             case "inappropriate":
-                return {
-                    toolCallId,
-                    output: "Weise den Nutzer darauf hin, dass die Frage unangemessen ist. Du beantwortest ihm gerne Fragen zu den Wahlprogrammen der Parteien zur Bundestagswahl 2025."
-                }
+                return this.functionOutput("instructionOnly", {toolCallId}, `
+                    Weise den Nutzer darauf hin, dass die Frage unangemessen ist. 
+                    Du beantwortest ihm gerne Fragen zu den Wahlprogrammen der Parteien zur Bundestagswahl 2025.
+                `)
+            case "program":
+            default:
+                return this.functionOutput("directPartyOutput", {toolCallId, subPrompt, queriedParties, followUpQuestions},`
+                Antworte mit "Hier die Antwort:"
+            `)
         }
     }
 
-    async detailedInstructions(
-        toolCallId: string,
-        prompt: string,
-        parties: Party[],
-        followUpQuestions: string[] | undefined,
-        instruct: string
+    async functionOutput(
+        outputType: "instructionOnly" | "partyInput" | "directPartyOutput",
+        {toolCallId, followUpQuestions, subPrompt, queriedParties: parties, ignorePartyLimits}: {
+            toolCallId: string,
+            followUpQuestions?: string[],
+            subPrompt?: string,
+            queriedParties?: Party[],
+            ignorePartyLimits?: boolean,
+        },
+        output: string
     ): Promise<ToolFunctionResult> {
-        // No parties specified at all or too many parties specified
-        if (parties.length === 0 || parties.length > maxNumberParties) {
+        if (!ignorePartyLimits && parties && (parties?.length === 0 || parties?.length > maxNumberParties)) {
             this.updateResult(_ => ({command: "partySelector"}))
             return {
                 toolCallId,
@@ -109,16 +109,20 @@ class MetaAssistantRun extends AssistantRun<Result> {
             }
         }
 
-        // All requested parties are supported
+        const events = followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : []
+        if (outputType === "instructionOnly") {
+            return {toolCallId, output, events}
+        }
+
         const partyAssistants = await Promise.all(parties.map(async party =>
-            createPartyAssistantRun(this.aiClient, partyProps[party].assistantId, prompt)
+            createPartyAssistantRun(party, this.aiClient, partyProps[party].assistantId, subPrompt),
         ))
-        console.log("created party assistants")
         return {
             toolCallId,
-            output: `${instruct}`,
-            events: followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : undefined,
-            delegateAssistants: partyAssistants
+            output,
+            events,
+            inputAssistants: outputType === "partyInput" ? partyAssistants : undefined,
+            directOutputAssistants: outputType === "directPartyOutput" ? partyAssistants : undefined,
         }
     }
 }
@@ -129,11 +133,12 @@ async function createMetaAssistantRun(
     message: string,
 ) {
     return await createRun({
+        name: "Meta Assistant",
         aiClient,
         assistantId: metaAssistantId,
         threadId,
         message,
-    }, (aiClient, threadId, stream, model) => new MetaAssistantRun(aiClient, threadId, stream, model))
+    }, (name, aiClient, threadId, stream, model) => new MetaAssistantRun(name, aiClient, threadId, stream, model))
 }
 
 async function runAssistant(aiClient: AIClient, threadId: string | undefined, message: string, request: HttpRequest): Promise<StreamingFunctionResponse> {
@@ -149,9 +154,10 @@ async function runAssistant(aiClient: AIClient, threadId: string | undefined, me
 
 async function sendMixpanelEvent(result: AssistantRunResult, request: HttpRequest) {
     console.log(`meta assistant finished with these results:\n${JSON.stringify(result, null, 2)}`)
+    const {name, ...tracked} = result
     mixpanel.track("Question Processed", {
-        ...result,
-        ...getMixpanelEvent(request)
+        ...tracked,
+        ...getMixpanelEvent(request),
     })
 }
 

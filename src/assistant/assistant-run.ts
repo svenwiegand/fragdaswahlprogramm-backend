@@ -8,6 +8,8 @@ export type AssistantModel = "mini" | "standard"
 export type RunStream = AsyncIterable<AssistantStreamEvent>
 
 export type RunCreateParams<Result extends AssistantRunResult = AssistantRunResult> = {
+    /** Just for identification in the logs */
+    name?: string
     aiClient: AIClient
     assistantId: string
     threadId?: string
@@ -30,7 +32,12 @@ export type ToolFunctionResult = {
     events?: SSEEvent[]
 
     /**
-     * An optional list of assistant runs.
+     * An optional list of assistant runs, which provide further input to answer the question.
+     */
+    inputAssistants?: AssistantRun[]
+
+    /**
+     * An optional list of assistant runs that provide the output to the question.
      * The output of these runs will be piped appended to the output of the original run in the order they are provided.
      * Further on these things will happen:
      *
@@ -39,11 +46,12 @@ export type ToolFunctionResult = {
      *
      * If used, output should specify instructions for the assistant not to generate any further output.
      * */
-    delegateAssistants?: AssistantRun[]
+    directOutputAssistants?: AssistantRun[]
 }
 export type ToolFunction = <Arguments = unknown>(toolCallId: string, args: Arguments) => Promise<ToolFunctionResult>
 
 export type AssistantRunResult = {
+    name?: string
     threadId: string
     inputTokensStandard: number
     outputTokensStandard: number
@@ -62,26 +70,35 @@ export const initialAssistantRunResult: AssistantRunResult = {
     outputTokensMini: 0,
 }
 
-type RunCompletedListener = (result: AssistantRunResult, content?: string) => Promise<void>|void
+export type RunCompletedListener = (result: AssistantRunResult, content?: string) => Promise<void>|void
+
+type FunctionProcessingResult = {
+    stream: RunStream,
+    events: SSEEvent[],
+    directOutputAssistants: AssistantRun[]
+}
 
 export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult> {
+    readonly name: string | undefined
     readonly aiClient: AIClient
     readonly threadId: string
     readonly rootStream: RunStream
     readonly model: AssistantModel
     protected readonly encoder = new TextEncoder()
+    private runId: string | undefined
     private content = ""
     private runResult: Result
     private resultListeners: RunCompletedListener[] = []
 
     protected readonly toolFunctions: Record<string, ToolFunction> = {}
 
-    constructor(aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel, initialResult: Result) {
+    constructor(name: string | undefined, aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel, initialResult: Result) {
+        this.name = name
         this.aiClient = aiClient
         this.threadId = threadId
         this.rootStream = stream
         this.model = model
-        this.runResult = {...initialResult, threadId}
+        this.runResult = {...initialResult, threadId, name}
     }
 
     addCompletedListener(listener: RunCompletedListener): void {
@@ -96,7 +113,43 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         this.runResult = {...this.runResult, ...updater(this.runResult)}
     }
 
-    private onFinalEvent(event: AssistantStreamEvent.ThreadRunCompleted | AssistantStreamEvent.ThreadRunFailed): void {
+    private subAssistantCompletionHandler<DelegateResult extends Result>(addOutputToContext: boolean = false) {
+        return async (r: DelegateResult, content: string) => {
+            const {
+                name,
+                threadId,
+                inputTokensStandard,
+                outputTokensStandard,
+                inputTokensMini,
+                outputTokensMini,
+                result,
+                duration,
+                errorCode,
+                errorMessage,
+                ...remaining
+            } = r
+            this.updateResult(prev => ({
+                inputTokensMini: prev.inputTokensMini + inputTokensMini,
+                inputTokensStandard: prev.inputTokensStandard + inputTokensStandard,
+                outputTokensMini: prev.outputTokensMini + outputTokensMini,
+                outputTokensStandard: prev.outputTokensStandard + outputTokensStandard,
+                result: prev.result === "failure" || result === "failure" ? "failure" : "success",
+                errorCode: prev.errorCode || errorCode,
+                errorMessage: prev.errorMessage || errorMessage,
+                ...remaining,
+            } as unknown as Partial<Result>))
+            console.log(`Sub assistant ${name} completed with ${result}`)
+            if (result === "failure") {
+                console.error(`Sub assistant ${name} failed with error: ${errorCode}: ${errorMessage}`)
+            }
+            if (addOutputToContext && content) {
+                console.log("Adding output to context")
+                await this.aiClient.beta.threads.messages.create(this.threadId, {role: "assistant", content})
+            }
+        }
+    }
+
+    private onFinalEvent(event: AssistantStreamEvent.ThreadRunCompleted | AssistantStreamEvent.ThreadRunFailed | AssistantStreamEvent.ThreadRunCancelled): void {
         const safeDuration = (start: number | null, end: number | null): number | undefined => start && end ? end - start : undefined
         this.updateResult(_ => ({
             inputTokensStandard: this.model === "standard" ? event.data.usage.prompt_tokens : 0,
@@ -119,26 +172,41 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
     }
 
     async* output(): SSEStream {
-        yield* this.processStream(this.rootStream, true)
+        try {
+            yield* this.processStream(this.rootStream, true)
+        } catch (e) {
+            console.error(`Unexpected error in assistant run ${this.name}`, e)
+            if (this.runId) {
+                try {
+                    await this.aiClient.beta.threads.runs.cancel(this.threadId, this.runId)
+                    console.log("Run cancelled")
+                } catch {
+                    console.log("Cancelling run failed")
+                }
+            }
+        }
+    }
+
+    async fullOutput(): Promise<string> {
+        for await (const _ of this.output()) {}
+        return this.content
     }
 
     protected async* processStream(stream: RunStream, rootCall: boolean = false): SSEStream {
         for await (const event of stream) {
+            if (event.event === "thread.run.created") {
+                this.runId = event.data.id
+            }
             if (event.event === "thread.run.requires_action") {
-                const result = await this.processFunctionCalls(event)
-                console.log("sending function provided events")
-                for await (const event of result.events) {
-                    yield* this.sendEvent(event.event, event.data)
-                }
-                console.log("processing stream")
-                yield* this.processStream(result.stream)
-                console.log("processing delegate assistants")
-                yield* this.processDelegateAssistants(result.delegateAssistants)
+                const functionResults = await this.processFunctionCalls(event)
+                yield* this.processFunctionProcessingResult(functionResults)
             } else if (event.event === "thread.message.delta") {
                 yield* this.processMessageDelta(event)
             } else if (event.event === "thread.run.completed") {
                 this.onFinalEvent(event)
             } else if (event.event === "thread.run.failed") {
+                this.onFinalEvent(event)
+            } else if (event.event === "thread.run.cancelled") {
                 this.onFinalEvent(event)
             }
         }
@@ -149,7 +217,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
 
     private async processFunctionCalls(
         event: AssistantStreamEvent.ThreadRunRequiresAction,
-    ): Promise<{ stream: RunStream, events: SSEEvent[], delegateAssistants: AssistantRun[] }> {
+    ): Promise<FunctionProcessingResult> {
         console.log(`Event: ${event.event} (${event.data.required_action.submit_tool_outputs.tool_calls.length} tool calls)`)
         const resultPromises = event.data.required_action.submit_tool_outputs.tool_calls.map(async (toolCall): Promise<ToolFunctionResult> => {
             const func = this.toolFunctions[toolCall.function.name]
@@ -162,12 +230,24 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
                 return {toolCallId: toolCall.id, output: ""}
             }
         })
-
         const results = await Promise.all(resultPromises)
+
+        const resultArray = <T>(extract: (result: ToolFunctionResult) => T[] | undefined): T[] =>
+            results.filter(result => !!extract(result)).flatMap(extract)
+
+        const inputAssistants = resultArray(result => result.inputAssistants)
+        console.log(`fetching input of ${inputAssistants.length} input assistants`)
+        const inputAssistantsContent = await Promise.all(inputAssistants.map(inputAssistant => {
+            inputAssistant.addCompletedListener(this.subAssistantCompletionHandler())
+            return inputAssistant.fullOutput()
+        }))
+
+        console.log("Providing tool outputs")
         const toolOutputs: RunSubmitToolOutputsParams.ToolOutput[] = results.map(result => ({
             tool_call_id: result.toolCallId,
-            output: result.output,
+            output: `${result.output}\n\n${inputAssistantsContent.join("\n\n")}`,
         }))
+
         const stream = this.aiClient.beta.threads.runs.submitToolOutputsStream(
             event.data.thread_id,
             event.data.id,
@@ -175,45 +255,23 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
                 tool_outputs: toolOutputs,
             },
         )
-        const events = results.filter(result => !!result.events).flatMap(result => result.events)
-        const delegateAssistants = results.filter(result => !!result.delegateAssistants).flatMap(result => result.delegateAssistants)
-        console.log(`functions submitted with ${events.length} events and ${delegateAssistants.length} delegate assistants`)
-        return {stream, events, delegateAssistants}
+        const events = resultArray(result => result.events)
+        const directOutputAssistants = resultArray(result => result.directOutputAssistants)
+        console.log(`functions submitted with ${events.length} events and ${directOutputAssistants.length} direct output assistants`)
+        return {stream, events, directOutputAssistants}
     }
 
-    private async* processDelegateAssistants(assistants: AssistantRun[]): SSEStream {
-        const onDelegateCompleted = async <DelegateResult extends Result>(r: DelegateResult, content: string) => {
-            const {
-                threadId,
-                inputTokensStandard,
-                outputTokensStandard,
-                inputTokensMini,
-                outputTokensMini,
-                result,
-                duration,
-                errorCode,
-                errorMessage,
-                ...remaining
-            } = r
-            this.updateResult(prev => ({
-                inputTokensMini: prev.inputTokensMini + inputTokensMini,
-                inputTokensStandard: prev.inputTokensStandard + inputTokensStandard,
-                outputTokensMini: prev.outputTokensMini + outputTokensMini,
-                outputTokensStandard: prev.outputTokensStandard + outputTokensStandard,
-                result: prev.result === "failure" || result === "failure" ? "failure" : "success",
-                errorCode: prev.errorCode || errorCode,
-                errorMessage: prev.errorMessage || errorMessage,
-                ...remaining,
-            } as unknown as Partial<Result>))
-            console.log(`Delegate completed with ${result}`)
-            if (result === "failure") {
-                console.error(`Delegate failed with error: ${errorCode}: ${errorMessage}`)
-            }
-            await this.aiClient.beta.threads.messages.create(this.threadId, {role: "assistant", content})
+    private async* processFunctionProcessingResult(result: FunctionProcessingResult): SSEStream {
+        console.log("sending function provided events")
+        for await (const event of result.events) {
+            yield* this.sendEvent(event.event, event.data)
         }
-        for await (const assistant of assistants) {
+        console.log("processing stream")
+        yield* this.processStream(result.stream)
+        console.log("processing direct output assistants")
+        for await (const assistant of result.directOutputAssistants) {
             yield* this.sendEvent("message", "\n\n")
-            assistant.addCompletedListener(onDelegateCompleted)
+            assistant.addCompletedListener(this.subAssistantCompletionHandler(true))
             yield* assistant.output()
         }
     }
@@ -239,8 +297,8 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
 
 export async function createRun(
     {aiClient, ...params}: RunCreateParams,
-    newInstance: (aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) => AssistantRun =
-        (aiClient, threadId, stream, model) => new AssistantRun<AssistantRunResult>(aiClient, threadId, stream, model, initialAssistantRunResult),
+    newInstance: (name: string | undefined, aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) => AssistantRun =
+        (name, aiClient, threadId, stream, model) => new AssistantRun<AssistantRunResult>(name, aiClient, threadId, stream, model, initialAssistantRunResult),
 ): Promise<AssistantRun> {
     const assistant = await aiClient.beta.assistants.retrieve(params.assistantId)
     console.log(`assistant model: ${assistant.model}`)
@@ -256,5 +314,5 @@ export async function createRun(
         stream: true,
     })
     console.log(`created run for thread ${tid}`)
-    return newInstance(aiClient, tid, stream, model)
+    return newInstance(params.name, aiClient, tid, stream, model)
 }

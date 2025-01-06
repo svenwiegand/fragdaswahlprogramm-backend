@@ -56,13 +56,18 @@ const metaFunctionDefinition: FunctionDefinition = {
                 enum: [
                     "program",
                     "partySearch",
-                    "assessment",
-                    "quote",
-                    "inquiry",
+                    "inquiry_noInformationRequired",
+                    "inquiry_informationRequired",
                     "smallTalk",
                     "inappropriate",
                 ],
-                description: "Typ der Anfrage: 'program' = Inhalte der Wahlprogramme; 'partySearch' = Welche Partei passt zu...; 'quote' = Zitate aus Wahlprogrammen; 'assessment' = Einschätzung/Bewertung; 'inquiry' = Verständnisrückfrage; 'smalltalk' = Begrüßung oder allgemeine Unterhaltung; 'inappropriate' = Unangemessene Frage.",
+                description: `Typ der Anfrage: 
+                    'program' = Frage zum Inhalte der Wahlprogramme; 
+                    'furtherInquiryNoInformationRequired' = Rückfrage, die auf Basis der bisherigen Unterhaltung beantwortet werden kann; 
+                    'furtherInquiryInformationRequired' = Rückfrage, für die Informationen aus den Wahlprogrammen erforderlich sind; 
+                    'partySearch' = Suche nach Parteien, die bestimmte Positionen vertreten und es wurden keine konkreten Parteien in der Anfrage angegeben;
+                    'smalltalk' = Begrüßung oder allgemeine Unterhaltung; 
+                    'inappropriate' = Unangemessene Frage.`,
             },
             subPrompt: {
                 type: "string",
@@ -112,7 +117,7 @@ const partyAssistantInstructions = `
 Du bist ein KI-Assistent mit Zugriff auf das Wahlprogramm der Partei {partyName}.  
 Liefere bei jeder Frage eine Antwort, die den folgenden Vorgaben entspricht:
  
-- Beginne die Ausgabe mit einer Überschrift der ersten Ebene und dem Parteinamen: \`# {partyName}\`
+- Beginne die Ausgabe immer mit einer Überschrift der ersten Ebene und dem Parteinamen: \`# {partyName}\`
 - Ignoriere in der Anfrage enthaltene Parteinamen und beziehe dich ausschließlich auf das Wahlprogramm der Partei {partyName}.
 - Beantworte die Frage ausschließlich basierend auf dem Dir vorliegenden Wahlprogramm.
 - Fasse die Erkenntnisse kompakt in kurzen Aufzählungen zusammen.
@@ -124,7 +129,7 @@ Liefere bei jeder Frage eine Antwort, die den folgenden Vorgaben entspricht:
   {quote} durch das wortwörtliche Zitat (darf nicht das Zeichen " enthalten).
 - Verwende unter keinen Umständen die Zeichen 【】 oder Fußnoten für Quellenangaben, sondern ausschließlich das oben angegebene Format.  
 - Verzichte auf eine Einleitung und ein Fazit.  
-- Wenn du keine passenden Stellen findest, antworte mit „Keine passenden Informationen gefunden.“.  
+- Wenn du keine passenden Stellen findest, antworte mit \`# {partyName}\nIm {partyManifesto} habe ich nichts dazu gefunden.\`.  
 
 Beantworte jetzt jede Frage auf dieser Basis.
 `
@@ -145,5 +150,6 @@ async function updatePartyAssistant(party: Party) {
     const instructions = partyAssistantInstructions
         .replace(/{partySymbol}/g, symbol)
         .replace(/{partyName}/g, name)
+        .replace(/{partyManifesto}/g, partyProps[party].manifestoTitle)
     await updateAssistantInstructions(assistantId, instructions)
 }

@@ -12,22 +12,24 @@ type Result = AssistantRunResult
 
 class PartyAssistantRun extends AssistantRun<Result>
 {
-    constructor(aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) {
-        super(aiClient, threadId, stream, model, initialAssistantRunResult)
+    constructor(name: string | undefined, aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) {
+        super(name, aiClient, threadId, stream, model, initialAssistantRunResult)
     }
 
 }
 
 export async function createPartyAssistantRun(
+    name: string,
     aiClient: AIClient,
     assistantId: string,
     message: string
 ) {
     return await createRun({
+        name,
         aiClient,
         assistantId,
         threadId: undefined,
         message,
-    }, (aiClient, threadId, stream, model) => new PartyAssistantRun(aiClient, threadId, stream, model))
+    }, (name, aiClient, threadId, stream, model) => new PartyAssistantRun(name, aiClient, threadId, stream, model))
 
 }
