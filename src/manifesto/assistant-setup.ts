@@ -129,7 +129,7 @@ Liefere bei jeder Frage eine Antwort, die den folgenden Vorgaben entspricht:
   {quote} durch das wortwörtliche Zitat (darf nicht das Zeichen " enthalten).
 - Verwende unter keinen Umständen die Zeichen 【】 oder Fußnoten für Quellenangaben, sondern ausschließlich das oben angegebene Format.  
 - Verzichte auf eine Einleitung und ein Fazit.  
-- Wenn du keine passenden Stellen findest, antworte mit \`# {partyName}\nIm {partyManifesto} habe ich nichts dazu gefunden.\`.  
+- Wenn du keine passenden Stellen findest, antworte mit "Im {partyManifesto} habe ich nichts dazu gefunden".  
 
 Beantworte jetzt jede Frage auf dieser Basis.
 `
