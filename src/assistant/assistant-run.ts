@@ -113,7 +113,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         this.runResult = {...this.runResult, ...updater(this.runResult)}
     }
 
-    private subAssistantCompletionHandler<DelegateResult extends Result>(addOutputToContext: boolean = false) {
+    private subAssistantCompletionHandler<DelegateResult extends Result>(directOutput: boolean = false) {
         return async (r: DelegateResult, content: string) => {
             const {
                 name,
@@ -142,9 +142,11 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
             if (result === "failure") {
                 console.error(`Sub assistant ${name} failed with error: ${errorCode}: ${errorMessage}`)
             }
-            if (addOutputToContext && content) {
+            if (directOutput && content) {
                 console.log("Adding output to context")
                 await this.aiClient.beta.threads.messages.create(this.threadId, {role: "assistant", content})
+            } else if (!directOutput) {
+                console.log(content)
             }
         }
     }
