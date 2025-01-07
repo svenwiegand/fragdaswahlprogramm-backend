@@ -1,7 +1,12 @@
 import OpenAI from "openai"
-import {partyProps, Party, maxNumberParties} from "./parties"
-import {updateAssistantFunctionDefinition, updateAssistantInstructions} from "../assistant/assistant-setup"
+import {parties as partyList, partyProps, Party, maxNumberParties} from "./parties"
+import {
+    replaceVectorStoreFiles,
+    updateAssistantFunctionDefinition,
+    updateAssistantInstructions,
+} from "../assistant/assistant-setup"
 import FunctionDefinition = OpenAI.FunctionDefinition
+import path from "node:path"
 
 export const metaAssistantId = "asst_PUwOsg3hTIjlOWNlJXAsMqHc"
 
@@ -236,4 +241,13 @@ async function updatePartyAssistant(party: Party) {
         .replace(/{partyName}/g, name)
         .replace(/{partyManifesto}/g, partyProps[party].manifestoTitle)
     await updateAssistantInstructions(assistantId, instructions)
+}
+
+export async function updateVectorStore(party: Party | "all") {
+    if (party === "all") {
+        await Promise.all(partyList.map(async party => updateVectorStore(party)))
+    } else {
+        const filePath = path.join(__dirname, "../../../assets/wahlprogramme", `${party}.pdf`)
+        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath)
+    }
 }
