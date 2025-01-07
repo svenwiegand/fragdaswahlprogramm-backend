@@ -2,6 +2,7 @@ import {app} from "@azure/functions"
 import {AIClient} from "../common/ai-client"
 import {SSEStream, streamingAiFunction} from "../common/ai-function"
 import {OpenAI} from "openai"
+import {devMode} from "../common/mode"
 
 async function generateResponse(aiClient: AIClient, message: string): Promise<SSEStream> {
     const stream = await aiClient.chat.completions.create({
@@ -30,9 +31,11 @@ export async function* chatCompletionStreamToSSE(stream: ChatCompletionStream): 
 
 const message = streamingAiFunction(generateResponse)
 
-app.setup({enableHttpStream: true})
-app.http('message', {
-    methods: ['POST'],
-    authLevel: 'anonymous',
-    handler: message,
-})
+if (devMode) {
+    app.setup({enableHttpStream: true})
+    app.http('message', {
+        methods: ['POST'],
+        authLevel: 'anonymous',
+        handler: message,
+    })
+}

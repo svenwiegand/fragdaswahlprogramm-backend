@@ -3,6 +3,7 @@ import {streamingAiFunction} from "../common/ai-function"
 import {corsHeaders, corsOptionsHandler} from "../common/cors"
 import {aiClient} from "../common/ai-client"
 import {createOrPostToThread} from "../manifesto/assistant-meta"
+import {devMode} from "../common/mode"
 
 async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
     const threadId = request.params.threadId
@@ -21,12 +22,15 @@ const createThreadFunction = streamingAiFunction(createOrPostToThread)
 const postToThreadFunction = streamingAiFunction(createOrPostToThread)
 
 app.setup({enableHttpStream: true})
-app.http("getThread", {
-    methods: ["GET"],
-    authLevel: "anonymous",
-    route: "thread/{threadId}",
-    handler: getThread,
-})
+
+if (devMode) {
+    app.http("getThread", {
+        methods: ["GET"],
+        authLevel: "anonymous",
+        route: "thread/{threadId}",
+        handler: getThread,
+    })
+}
 
 app.http("createThread", {
     methods: ["POST"],
