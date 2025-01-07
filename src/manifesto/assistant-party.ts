@@ -22,7 +22,8 @@ export async function createPartyAssistantRun(
     name: string,
     aiClient: AIClient,
     assistantId: string,
-    message: string
+    message: string,
+    searchResults: "many" | "medium" | "few"
 ) {
     return await createRun({
         name,
@@ -30,6 +31,12 @@ export async function createPartyAssistantRun(
         assistantId,
         threadId: undefined,
         message,
+        createParams: {tools: [{
+            type: "file_search",
+            file_search: {
+                max_num_results: searchResults === "many" ? 20 : searchResults === "medium" ? 13 : 5,
+            }
+        }]}
     }, (name, aiClient, threadId, stream, model) => new PartyAssistantRun(name, aiClient, threadId, stream, model))
 
 }

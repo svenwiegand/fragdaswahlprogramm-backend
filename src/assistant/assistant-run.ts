@@ -2,6 +2,7 @@ import {AIClient} from "../common/ai-client"
 import {AssistantStreamEvent, AssistantToolChoice} from "openai/resources/beta"
 import {SSEStream} from "../common/ai-function"
 import {RunSubmitToolOutputsParams} from "openai/resources/beta/threads"
+import {RunCreateParamsStreaming} from "openai/src/resources/beta/threads/runs/runs"
 
 export type AssistantModel = "mini" | "standard"
 
@@ -15,6 +16,7 @@ export type RunCreateParams<Result extends AssistantRunResult = AssistantRunResu
     threadId?: string
     message: string
     toolChoice?: AssistantToolChoice
+    createParams?: Partial<RunCreateParamsStreaming>
 }
 
 export type SSEEvent = {
@@ -317,6 +319,7 @@ export async function createRun(
         assistant_id: params.assistantId,
         tool_choice: params.toolChoice,
         stream: true,
+        ...(params.createParams ? params.createParams : {}),
     })
     console.log(`created run for thread ${tid}`)
     return newInstance(params.name, aiClient, tid, stream, model)

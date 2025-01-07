@@ -80,7 +80,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         return {
             toolCallId,
             output: "",
-            ...await this.inputAssistants(parties, args.minimalPrompt),
+            ...await this.inputAssistants(parties, args.minimalPrompt, "few"),
             ...this.createEvents(args.followUpQuestions, statusEvent.searching),
         }
     }
@@ -90,7 +90,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         return {
             toolCallId,
             output: "",
-            ...await this.inputAssistants(args.parties, args.minimalPrompt),
+            ...await this.inputAssistants(args.parties, args.minimalPrompt, args.parties.length == 1 ? "many" : "medium"),
             ...this.createEvents(args.followUpQuestions, statusEvent.searching),
         }
     }
@@ -111,9 +111,9 @@ class MetaAssistantRun extends AssistantRun<Result> {
         }
     }
 
-    private async inputAssistants(parties: Party[], prompt: string): Promise<{ inputAssistants: AssistantRun[] }> {
+    private async inputAssistants(parties: Party[], prompt: string, searchResults: "many" | "medium" | "few"): Promise<{ inputAssistants: AssistantRun[] }> {
         const inputAssistants = await Promise.all(parties.map(async party =>
-            createPartyAssistantRun(party, this.aiClient, partyProps[party].assistantId, prompt),
+            createPartyAssistantRun(party, this.aiClient, partyProps[party].assistantId, prompt, searchResults),
         ))
         return {inputAssistants}
     }
