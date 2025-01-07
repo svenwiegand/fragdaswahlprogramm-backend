@@ -42,6 +42,11 @@ type Result = AssistantRunResult & Query & {
     command?: Command
 }
 
+const statusEvent = {
+    searching: {status: "searching"},
+    generating: {status: "generating"},
+}
+
 class MetaAssistantRun extends AssistantRun<Result> {
     toolFunctions = {
         selectParties: this.selectParties.bind(this),
@@ -66,7 +71,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
-            events: [{event: "command", data: "selectParties"}],
+            ...this.createEvents(undefined, {command: "selectParties"}),
         }
     }
 
@@ -76,7 +81,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
             toolCallId,
             output: "",
             ...await this.inputAssistants(parties, args.minimalPrompt),
-            ...this.followUpQuestions(args.followUpQuestions),
+            ...this.createEvents(args.followUpQuestions, statusEvent.searching),
         }
     }
 
@@ -86,18 +91,24 @@ class MetaAssistantRun extends AssistantRun<Result> {
             toolCallId,
             output: "",
             ...await this.inputAssistants(args.parties, args.minimalPrompt),
-            ...this.followUpQuestions(args.followUpQuestions),
+            ...this.createEvents(args.followUpQuestions, statusEvent.searching),
         }
     }
 
     private async sendRequestInfo(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
         console.log("sendRequestInfo", args)
-        return {toolCallId, output: "", ...this.followUpQuestions(args.followUpQuestions)}
+        return {toolCallId, output: "", ...this.createEvents(args.followUpQuestions, statusEvent.generating)}
     }
 
-    private followUpQuestions(followUpQuestions: string[]): { events: SSEEvent[] } {
-        const events = followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : []
-        return {events}
+    private createEvents(
+        followUpQuestions: string[] | undefined = undefined,
+        events: Record<string, string> | undefined = undefined
+    ): {events: SSEEvent[]} {
+        const followUpEvents = followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : []
+        const otherEvents = events ? Object.entries(events).map(([event, data]) => ({event, data})) : []
+        return {
+            events: [...followUpEvents, ...otherEvents]
+        }
     }
 
     private async inputAssistants(parties: Party[], prompt: string): Promise<{ inputAssistants: AssistantRun[] }> {

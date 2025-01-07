@@ -74,7 +74,6 @@ export type RunCompletedListener = (result: AssistantRunResult, content?: string
 
 type FunctionProcessingResult = {
     stream: RunStream,
-    events: SSEEvent[],
     directOutputAssistants: AssistantRun[]
 }
 
@@ -198,10 +197,8 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         for await (const event of stream) {
             if (event.event === "thread.run.created") {
                 this.runId = event.data.id
-            }
-            if (event.event === "thread.run.requires_action") {
-                const functionResults = await this.processFunctionCalls(event)
-                yield* this.processFunctionProcessingResult(functionResults)
+            } else if (event.event === "thread.run.requires_action") {
+                yield* this.processFunctionCalls(event)
             } else if (event.event === "thread.message.delta") {
                 yield* this.processMessageDelta(event)
             } else if (event.event === "thread.run.completed") {
@@ -217,9 +214,29 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         }
     }
 
-    private async processFunctionCalls(
+    private async* processFunctionCalls(event: AssistantStreamEvent.ThreadRunRequiresAction): SSEStream {
+        const functionResults = await this.callFunctions(event)
+
+        console.log("sending function provided events")
+        const sseEvents = functionResults.filter(r => !!r.events).flatMap(r => r.events)
+        for await (const event of sseEvents) {
+            yield* this.sendEvent(event.event, event.data)
+        }
+
+        const processingResults = await this.processFunctionResults(functionResults)
+        console.log("processing stream")
+        yield* this.processStream(processingResults.stream)
+        console.log("processing direct output assistants")
+        for await (const assistant of processingResults.directOutputAssistants) {
+            yield* this.sendEvent("message", "\n\n")
+            assistant.addCompletedListener(this.subAssistantCompletionHandler(true))
+            yield* assistant.output()
+        }
+    }
+
+    private async callFunctions(
         event: AssistantStreamEvent.ThreadRunRequiresAction,
-    ): Promise<FunctionProcessingResult> {
+    ): Promise<ToolFunctionResult[]> {
         console.log(`Event: ${event.event} (${event.data.required_action.submit_tool_outputs.tool_calls.length} tool calls)`)
         const resultPromises = event.data.required_action.submit_tool_outputs.tool_calls.map(async (toolCall): Promise<ToolFunctionResult> => {
             const func = this.toolFunctions[toolCall.function.name]
@@ -232,8 +249,10 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
                 return {toolCallId: toolCall.id, output: ""}
             }
         })
-        const results = await Promise.all(resultPromises)
+        return await Promise.all(resultPromises)
+    }
 
+    private async processFunctionResults(results: ToolFunctionResult[]): Promise<FunctionProcessingResult> {
         const resultArray = <T>(extract: (result: ToolFunctionResult) => T[] | undefined): T[] =>
             results.filter(result => !!extract(result)).flatMap(extract)
 
@@ -251,31 +270,15 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         }))
 
         const stream = this.aiClient.beta.threads.runs.submitToolOutputsStream(
-            event.data.thread_id,
-            event.data.id,
+            this.threadId,
+            this.runId,
             {
                 tool_outputs: toolOutputs,
             },
         )
-        const events = resultArray(result => result.events)
         const directOutputAssistants = resultArray(result => result.directOutputAssistants)
-        console.log(`functions submitted with ${events.length} events and ${directOutputAssistants.length} direct output assistants`)
-        return {stream, events, directOutputAssistants}
-    }
-
-    private async* processFunctionProcessingResult(result: FunctionProcessingResult): SSEStream {
-        console.log("sending function provided events")
-        for await (const event of result.events) {
-            yield* this.sendEvent(event.event, event.data)
-        }
-        console.log("processing stream")
-        yield* this.processStream(result.stream)
-        console.log("processing direct output assistants")
-        for await (const assistant of result.directOutputAssistants) {
-            yield* this.sendEvent("message", "\n\n")
-            assistant.addCompletedListener(this.subAssistantCompletionHandler(true))
-            yield* assistant.output()
-        }
+        console.log(`functions submitted with ${directOutputAssistants.length} direct output assistants`)
+        return {stream, directOutputAssistants}
     }
 
     protected async* processMessageDelta(event: AssistantStreamEvent.ThreadMessageDelta): SSEStream {
