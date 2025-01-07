@@ -16,13 +16,6 @@ import {StreamingFunctionResponse} from "../common/ai-function"
 import {getMixpanelEvent, mixpanel} from "../common/mixpanel"
 
 
-type Query = {
-    queriedParties: Party[]
-    queryType: "program" | "partySearch" | "inquiry_noInformationRequired" | "inquiry_informationRequired" | "smallTalk" | "inappropriate"
-    subPrompt: string
-    category: string,
-    followUpQuestions: string[]
-}
 type PartiesArg = {
     parties: Party[]
 }
@@ -36,10 +29,12 @@ type FollowUpQuestionsArg = {
     followUpQuestions: string[]
 }
 
-type Command = "partySelector" | "followUpQuestions"
-
-type Result = AssistantRunResult & Query & {
-    command?: Command
+type Result = AssistantRunResult & {
+    queriedParties: Party[]
+    queryType: "selectParties" | "findParties" | "manifestoExtract" | "context" | "unknown"
+    subPrompt: string
+    category: string,
+    followUpQuestions: string[]
 }
 
 const statusEvent = {
@@ -59,15 +54,15 @@ class MetaAssistantRun extends AssistantRun<Result> {
         super(name, aiClient, threadId, stream, model, {
             ...initialAssistantRunResult,
             queriedParties: [],
-            queryType: "program",
+            queryType: "unknown",
             subPrompt: "",
-            category: "",
+            category: "unknown",
             followUpQuestions: [],
         })
     }
 
     private async selectParties(toolCallId: string): Promise<ToolFunctionResult> {
-        console.log("selectParties")
+        this.trackRequest("findParties", {})
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
@@ -76,7 +71,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
     }
 
     private async findParties(toolCallId: string, args: MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
-        console.log("findParties", args)
+        this.trackRequest("findParties", args)
         return {
             toolCallId,
             output: "",
@@ -86,7 +81,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
     }
 
     private async getManifestoExtract(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
-        console.log("getManifestoExtract", args)
+        this.trackRequest("manifestoExtract", args)
         return {
             toolCallId,
             output: "",
@@ -96,8 +91,19 @@ class MetaAssistantRun extends AssistantRun<Result> {
     }
 
     private async sendRequestInfo(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
-        console.log("sendRequestInfo", args)
+        this.trackRequest("context", args)
         return {toolCallId, output: "", ...this.createEvents(args.followUpQuestions, statusEvent.generating)}
+    }
+
+    private trackRequest(requestType: Result["queryType"], args: Partial<PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg>) {
+        console.log(`==> ${requestType}`, args)
+        this.updateResult(prev => ({
+            queryType: requestType,
+            category: args.category ?? prev.category,
+            subPrompt: args.minimalPrompt ?? prev.subPrompt,
+            followUpQuestions: Array.from(new Set([...prev.followUpQuestions, ...(args.followUpQuestions ?? [])])),
+            queriedParties: [...prev.queriedParties, ...(args.parties ?? [])],
+        }))
     }
 
     private createEvents(
