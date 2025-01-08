@@ -247,7 +247,9 @@ export async function updateVectorStore(party: Party | "all") {
     if (party === "all") {
         await Promise.all(partyList.map(async party => updateVectorStore(party)))
     } else {
-        const filePath = path.join(__dirname, "../../../assets/wahlprogramme", `${party}.pdf`)
-        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath)
+        const filePath = path.join(__dirname, "../../../assets/wahlprogramme-optimized", `${party}.pdf`)
+        // ensure, that a full page fits into a chunk, so that each chunk contains a page number for better references.
+        // Tokens per page vary from 750 to 980.
+        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath, 1000, 500)
     }
 }

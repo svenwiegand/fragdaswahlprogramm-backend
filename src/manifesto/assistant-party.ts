@@ -34,7 +34,7 @@ export async function createPartyAssistantRun(
         createParams: {tools: [{
             type: "file_search",
             file_search: {
-                max_num_results: searchResults === "many" ? 20 : searchResults === "medium" ? 13 : 5,
+                max_num_results: searchResults === "many" ? 16 : searchResults === "medium" ? 10 : 6,
             }
         }]}
     }, (name, aiClient, threadId, stream, model) => new PartyAssistantRun(name, aiClient, threadId, stream, model))

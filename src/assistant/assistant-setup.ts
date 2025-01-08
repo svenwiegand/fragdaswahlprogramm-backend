@@ -14,7 +14,7 @@ export async function updateAssistantFunctionDefinition(assistantId: string, fun
     })
 }
 
-export async function replaceVectorStoreFiles(vectorStoreId: string, filePath: string) {
+export async function replaceVectorStoreFiles(vectorStoreId: string, filePath: string, maxChunkSizeTokens: number = 800, chunkOverlapTokens: number = 400) {
     const name = path.basename(filePath).split(".")[0]
     const prevFiles = await aiClient.beta.vectorStores.files.list(vectorStoreId)
 
@@ -28,19 +28,25 @@ export async function replaceVectorStoreFiles(vectorStoreId: string, filePath: s
     fileStream.close()
 
     console.log(`${name}: Attaching file with id ${newFile.id} to store ${vectorStoreId}`)
-    await aiClient.beta.vectorStores.files.createAndPoll(
+    const result = await aiClient.beta.vectorStores.files.createAndPoll(
         vectorStoreId, {
             file_id: newFile.id,
             chunking_strategy: {
                 type: "static",
                 static: {
-                    max_chunk_size_tokens: 400,
-                    chunk_overlap_tokens: 200,
+                    max_chunk_size_tokens: maxChunkSizeTokens,
+                    chunk_overlap_tokens: chunkOverlapTokens,
                 },
             },
         }
     )
-    console.log(`${name}: Attached file to store ${vectorStoreId}`)
+    console.log(`${name}: Attached file to store ${vectorStoreId} with result ${result.status}`)
+    if (result.status === "failed") {
+        console.error(`${name}: Failed to attach file to store ${vectorStoreId} with ${result.last_error.code}: ${result.last_error.message}`)
+        await aiClient.files.del(newFile.id)
+        console.log(`${name}: Deleted new file ${newFile.id}`)
+        return
+    }
 
     console.log(`${name}: Deleting previous files`)
     for await (const file of prevFiles.data) {

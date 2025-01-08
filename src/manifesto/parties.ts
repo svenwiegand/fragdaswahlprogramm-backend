@@ -34,7 +34,7 @@ export const partyProps: Record<Party, PartyProps> = {
         name: "Bündnis 90/Die Grünen",
         symbol: "gruene",
         assistantId: "asst_XseCMF4gCT42Jh23lXuAtZR2",
-        vectorStoreId: "vs_135jZuhgQdWxzTI4uZnryXuL",
+        vectorStoreId: "vs_N00nbVnGW4ZG6ztuQeHQn49A",
         manifestoTitle: "Wahlprogramm von Bündnis 90/Die Grünen",
     },
     linke: {
