@@ -1,5 +1,5 @@
 export const maxNumberParties = 3
-export type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "linke" | "spd" | "volt"
+export type Party = "afd" | "gruene" | "bsw" | "cdu-csu" | "fdp" | "linke" | "spd" | "volt"
 export type PartyProps = {
     name: string
     symbol: string
@@ -16,6 +16,20 @@ export const partyProps: Record<Party, PartyProps> = {
         vectorStoreId: "vs_ccEyROZ9C4Eyox116juedNF3",
         manifestoTitle: "Wahlprogramm der AfD",
     },
+    gruene: {
+        name: "Bündnis 90/Die Grünen",
+        symbol: "gruene",
+        assistantId: "asst_XseCMF4gCT42Jh23lXuAtZR2",
+        vectorStoreId: "vs_N00nbVnGW4ZG6ztuQeHQn49A",
+        manifestoTitle: "Wahlprogramm von Bündnis 90/Die Grünen",
+    },
+    bsw: {
+        name: "Bündnis Sarah Wagenknecht",
+        symbol: "bsw",
+        assistantId: "asst_BT72iX055pJMXCpKOmQcUbbU",
+        vectorStoreId: "vs_aJMcPkgZIeLm69Urai933RUN",
+        manifestoTitle: "Wahlprogramm vom Bündnis Sarah Wagenknecht",
+    },
     "cdu-csu": {
         name: "CDU/CSU",
         symbol: "cdu-csu",
@@ -29,13 +43,6 @@ export const partyProps: Record<Party, PartyProps> = {
         assistantId: "asst_nWq7S82vXT6oKgih5oKiLbBH",
         vectorStoreId: "vs_6fSiSCdOgFCZo4fzbLxdMbsb",
         manifestoTitle: "Wahlprogramm der FDP",
-    },
-    gruene: {
-        name: "Bündnis 90/Die Grünen",
-        symbol: "gruene",
-        assistantId: "asst_XseCMF4gCT42Jh23lXuAtZR2",
-        vectorStoreId: "vs_N00nbVnGW4ZG6ztuQeHQn49A",
-        manifestoTitle: "Wahlprogramm von Bündnis 90/Die Grünen",
     },
     linke: {
         name: "Die Linke",
