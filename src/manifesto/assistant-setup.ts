@@ -21,7 +21,7 @@ const category = {
         "Umwelt & Klima",
         "Migration & Integration",
         "Außenpolitik",
-        "Innere Sicherheit",
+        "Sicherheit & Verteidigung",
         "Verkehr & Infrastruktur",
         "Digitalisierung & Technologie",
         "Europa",
