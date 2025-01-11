@@ -1,5 +1,5 @@
 export const maxNumberParties = 3
-export type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "linke" | "spd"
+export type Party = "afd" | "cdu-csu" | "fdp" | "gruene" | "linke" | "spd" | "volt"
 export type PartyProps = {
     name: string
     symbol: string
@@ -51,5 +51,12 @@ export const partyProps: Record<Party, PartyProps> = {
         vectorStoreId: "vs_DiSj2XvQu4dT63uYgRfIXKBX",
         manifestoTitle: "Wahlprogramm der SPD",
     },
+    volt: {
+        name: "Volt",
+        symbol: "volt",
+        assistantId: "asst_XH4lI5pWkxqmwZfUMKTkFpnX",
+        vectorStoreId: "vs_PuarirgyN7NT3kdeeSwoet9S",
+        manifestoTitle: "Wahlprogramm von Volt",
+    }
 }
 export const parties = Object.keys(partyProps) as Party[]
