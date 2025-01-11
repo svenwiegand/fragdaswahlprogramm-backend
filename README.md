@@ -14,3 +14,10 @@ Backend für [fragdaswahlprogramm](https://fragdaswahlprogramm.de) – eine Plat
 7. Anpassungen im Frontend vornehmen und Frontend deployen
 8. Backend deployen
 8. Assistenten aktualisieren: `PATCH http//localhost:7071/api/assistant`
+
+## Aktualisieren eines Wahlprogramms
+1. Wahlprogramm herunterladen und bereinigen, also Titelseite, Inhaltsverzeichnis und ggf. unnötige Einleitung entfernen
+2. Bereinigtes Wahlprogramm unter `assets/wahlprogramme-optimized` mit dem Namen `<symbol>.pdf` ablegen
+3. Update Vector-Store-Request durchführen: `PATCH http//localhost:7071/api/vectorstore/<symbol>`
+7. Anpassungen im Frontend vornehmen und Frontend deployen
+8. Backend kann, muss aber nicht deployt werden
