@@ -4,6 +4,7 @@ import {corsHeaders, corsOptionsHandler} from "../common/cors"
 import {aiClient} from "../common/ai-client"
 import {createOrPostToThread} from "../manifesto/assistant-meta"
 import {devMode} from "../common/mode"
+import {getRunOutputMessage} from "../manifesto/messages"
 
 async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
     const threadId = request.params.threadId
@@ -20,6 +21,27 @@ async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
 
 const createThreadFunction = streamingAiFunction(createOrPostToThread)
 const postToThreadFunction = streamingAiFunction(createOrPostToThread)
+
+const getThreadMessages = async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const threadId = request.params.threadId
+    const runId = request.query.get("runId")
+    if (runId) {
+        const result = await getRunOutputMessage(threadId, runId)
+        return {
+            status: result.status === "success" ? 200 : result.status === "notFound" ? 404 : 500,
+            headers: {
+                "Content-Type": "application/json",
+                ...corsHeaders,
+            },
+            body: JSON.stringify(result.messages),
+        }
+    } else {
+        return {
+            headers: corsHeaders,
+            status: 400,
+        }
+    }
+}
 
 app.setup({enableHttpStream: true})
 
@@ -44,6 +66,12 @@ app.http("postToThread", {
     route: "thread/{threadId}",
     handler: postToThreadFunction,
 })
+app.http("getThreadMessages", {
+    methods: ["GET"],
+    authLevel: "anonymous",
+    route: "thread/{threadId}/message",
+    handler: getThreadMessages,
+})
 app.http("createThreadOptions", {
     methods: ["OPTIONS"],
     authLevel: "anonymous",
@@ -54,5 +82,11 @@ app.http("postThreadOptions", {
     methods: ["OPTIONS"],
     authLevel: "anonymous",
     route: "thread/{threadId}",
+    handler: corsOptionsHandler,
+})
+app.http("getThreadMessagesOptions", {
+    methods: ["OPTIONS"],
+    authLevel: "anonymous",
+    route: "thread/{threadId}/message",
     handler: corsOptionsHandler,
 })

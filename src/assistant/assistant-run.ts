@@ -199,6 +199,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         for await (const event of stream) {
             if (event.event === "thread.run.created") {
                 this.runId = event.data.id
+                yield* this.sendEvent("runId", this.runId)
             } else if (event.event === "thread.run.requires_action") {
                 yield* this.processFunctionCalls(event)
             } else if (event.event === "thread.message.delta") {
