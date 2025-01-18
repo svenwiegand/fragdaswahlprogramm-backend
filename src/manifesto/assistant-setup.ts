@@ -7,6 +7,7 @@ import {
 } from "../assistant/assistant-setup"
 import FunctionDefinition = OpenAI.FunctionDefinition
 import path from "node:path"
+import {prepareMarkdown} from "./extract-manifesto"
 
 export const metaAssistantId = "asst_PUwOsg3hTIjlOWNlJXAsMqHc"
 
@@ -51,7 +52,7 @@ const minimalPrompt = {
 }
 
 const partyNames = Object.keys(partyProps).map(p => `${partyProps[p].name} (${p})`).join(", ")
-const refFormat = `'〔{"party": "{partySymbol}", "section": "$Kapitel", "shortSection": "$Kapitelkurzname", "page": $Seitenzahl, "quote": $Zitat}〕'`
+const refFormat = `'〔{"party": "{partySymbol}", "section": "$Abschnitt", "shortSection": "$Abschnittskurzname", "page": $Seitenzahl, "quote": $Zitat}〕'`
 
 
 const metaInstructions = `
@@ -226,8 +227,8 @@ Gehe mit jeder Anfrage wie folgt vor:
 # 3. Referenzen
 Ermittle zum Verweis auf das Quelldokument für jede relevante Aussage die folgenden Eigenschaften:
 
-- $Kapitel: exakte Überschrift des Kapitels im Dokument, in dem die Aussage gefunden wurde (ohne Anführungszeichen "). 
-- $Kapitelkurzname: eine auf maximal zwei Schlagworte reduzierte Variante von $Kapitel 
+- $Abschnitt: exakte Überschrift des Abschnitts im Dokument, in dem die Aussage gefunden wurde (ohne Anführungszeichen "). 
+- $Abschnittskurzname: eine auf maximal zwei Schlagworte reduzierte Variante von $Abschnitt 
 - $Seitenzahl: Nummer der Seite, auf der die Aussage zu finden ist. 
   Achte darauf, dass Du die Seitenzahl nutzt und *nicht* die eventuell vor jeder Zeile aufgeführte Zeilennummer.
   Seitenzahlen liegen üblicherweise im Bereich 1 bis 90.
@@ -277,9 +278,11 @@ export async function updateVectorStore(party: Party | "all") {
     if (party === "all") {
         await Promise.all(partyList.map(async party => updateVectorStore(party)))
     } else {
-        const filePath = path.join(__dirname, "../../../assets/wahlprogramme-optimized", `${party}.pdf`)
-        // ensure, that a full page fits into a chunk, so that each chunk contains a page number for better references.
-        // Tokens per page vary from 750 to 980.
-        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath, 1000, 500)
+        await prepareMarkdown(party)
+        const filePath = path.join(__dirname, "../../../assets/manifesto/markdown/prepared", `${party}.md`)
+        // ensure, that a paragraph fits into a chunk,
+        // we've prepared the markdown, so that each paragraph contains page and section information.
+        // The longest paragraphs contained less than 400 tokens.
+        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath, 400, 200)
     }
 }

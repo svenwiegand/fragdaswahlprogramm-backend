@@ -6,6 +6,12 @@ export type PartyProps = {
     assistantId: string
     vectorStoreId: string
     manifestoTitle: string
+    /**
+     * The logical number of the first page in the shortened PDF.
+     *
+     * Can be used, to override the automatic page number detection in the preparation of the markdown.
+     */
+    firstPageNumber?: number
 }
 
 export const partyProps: Record<Party, PartyProps> = {
@@ -50,6 +56,7 @@ export const partyProps: Record<Party, PartyProps> = {
         assistantId: "asst_pq68oRnhqemxQcB5gUD11U9o",
         vectorStoreId: "vs_oIGlEvu7NGw494QscVG3hMO1",
         manifestoTitle: "Wahlprogramm der Linken",
+        firstPageNumber: 1,
     },
     spd: {
         name: "SPD",
