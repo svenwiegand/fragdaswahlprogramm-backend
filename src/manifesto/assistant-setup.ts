@@ -9,7 +9,7 @@ import FunctionDefinition = OpenAI.FunctionDefinition
 import path from "node:path"
 import {prepareMarkdown} from "./extract-manifesto"
 
-export const metaAssistantId = "asst_PUwOsg3hTIjlOWNlJXAsMqHc"
+export const metaAssistantId = "asst_xyMjUtSYU1SM60qA0LbLYJ8M"
 
 const category = {
     type: "string",
