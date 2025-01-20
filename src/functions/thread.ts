@@ -4,7 +4,7 @@ import {corsHeaders, corsOptionsHandler} from "../common/cors"
 import {aiClient} from "../common/ai-client"
 import {createOrPostToThread} from "../manifesto/assistant-meta"
 import {devMode} from "../common/mode"
-import {getRunOutputMessage} from "../manifesto/messages"
+import {getRunOutputMessage, getThreadMessages as listThreadMessages, MessageResult} from "../manifesto/messages"
 
 async function getThread(request: HttpRequest): Promise<HttpResponseInit> {
     const threadId = request.params.threadId
@@ -25,21 +25,18 @@ const postToThreadFunction = streamingAiFunction(createOrPostToThread)
 const getThreadMessages = async (request: HttpRequest): Promise<HttpResponseInit> => {
     const threadId = request.params.threadId
     const runId = request.query.get("runId")
-    if (runId) {
-        const result = await getRunOutputMessage(threadId, runId)
-        return {
-            status: result.status === "success" ? 200 : result.status === "notFound" ? 404 : 500,
-            headers: {
-                "Content-Type": "application/json",
-                ...corsHeaders,
-            },
-            body: JSON.stringify(result.messages),
-        }
-    } else {
-        return {
-            headers: corsHeaders,
-            status: 400,
-        }
+    const after = request.query.get("after")
+    const getMessages: () => Promise<MessageResult> = runId
+        ? () => getRunOutputMessage(threadId, runId)
+        : () => listThreadMessages(threadId, after)
+    const result = await getMessages()
+    return {
+        status: result.status === "success" ? 200 : result.status === "notFound" ? 404 : 500,
+        headers: {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+        },
+        body: JSON.stringify({messages: result.messages, hasMore: result.hasMore}),
     }
 }
 

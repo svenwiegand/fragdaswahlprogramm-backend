@@ -8,15 +8,17 @@ type ThreadMessage = {
     content: string
 }
 
-type MessageResult = {
+export type MessageResult = {
     status: "success" | "notFound" | "failed"
     messages?: ThreadMessage[]
+    hasMore?: boolean
 }
 
 const terminalStates = ["expired", "completed", "failed", "incomplete", "cancelled"]
 const successStates = ["completed", "incomplete"]
 
 export async function getRunOutputMessage(threadId: string, runId: string): Promise<MessageResult> {
+    console.log(`Getting message for run ${runId} in thread ${threadId}`)
     try {
         while (true) {
             const run = await aiClient.beta.threads.runs.poll(threadId, runId)
@@ -31,7 +33,7 @@ export async function getRunOutputMessage(threadId: string, runId: string): Prom
             await new Promise(resolve => setTimeout(resolve, 1000))
         }
         const messagesPage = await aiClient.beta.threads.messages.list(threadId, {run_id: runId})
-        const messages = getThreadMessages(messagesPage.data)
+        const messages = transformMessages(messagesPage.data)
         return {status: "success", messages}
     } catch (e) {
         if (e instanceof NotFoundError) {
@@ -43,7 +45,25 @@ export async function getRunOutputMessage(threadId: string, runId: string): Prom
     }
 }
 
-function getThreadMessages(msgs: Message[]): ThreadMessage[] {
+export async function getThreadMessages(threadId: string, after: string | undefined): Promise<MessageResult> {
+    console.log(`Getting messages for thread ${threadId} after ${after}`)
+    try {
+        const messagesPage = await aiClient.beta.threads.messages.list(threadId, {order: "asc", after})
+        const messages = transformMessages(messagesPage.data)
+        console.log(`Got ${messages.length} messages`, messagesPage.nextPageInfo())
+        const hasMore = messagesPage.hasNextPage()
+        return {status: "success", messages, hasMore}
+    } catch (e) {
+        if (e instanceof NotFoundError) {
+            return {status: "notFound"}
+        } else {
+            console.error(`Failed to get messages for thread ${threadId}`, e)
+            return {status: "failed"}
+        }
+    }
+}
+
+function transformMessages(msgs: Message[]): ThreadMessage[] {
     return msgs.map(msg => ({
         id: msg.id,
         type: msg.role === "user" ? "question" : "answer",
