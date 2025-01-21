@@ -29,6 +29,11 @@ type FollowUpQuestionsArg = {
     followUpQuestions: string[]
 }
 
+type FunctionArgs = PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg & {
+    requestType: "positions" | "parties"
+    hasNecessaryInformation: boolean
+}
+
 type Result = AssistantRunResult & {
     queriedParties: Party[]
     queryType: "selectParties" | "findParties" | "manifestoExtract" | "context" | "unknown"
@@ -44,10 +49,7 @@ const statusEvent = {
 
 class MetaAssistantRun extends AssistantRun<Result> {
     toolFunctions = {
-        selectParties: this.selectParties.bind(this),
-        findParties: this.findParties.bind(this),
-        getManifestoExtract: this.getManifestoExtract.bind(this),
-        sendRequestInfo: this.sendRequestInfo.bind(this),
+        getPartyPositions: this.getPartyPositionsFunction.bind(this),
     }
 
     constructor(name: string | undefined, aiClient: AIClient, threadId: string, stream: RunStream, model: AssistantModel) {
@@ -61,8 +63,20 @@ class MetaAssistantRun extends AssistantRun<Result> {
         })
     }
 
-    private async selectParties(toolCallId: string): Promise<ToolFunctionResult> {
-        this.trackRequest("selectParties", {})
+    private async getPartyPositionsFunction(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
+        if (args.hasNecessaryInformation) {
+            return await this.noInfoRequired(toolCallId, args)
+        } else if (args.requestType === "parties" && args.parties.length === 0) {
+            return await this.findParties(toolCallId, args)
+        } else if (args.parties.length === 0 || args.parties.length > maxNumberParties) {
+            return await this.selectParties(toolCallId, args)
+        } else {
+            return await this.getManifestoExtract(toolCallId, args)
+        }
+    }
+
+    private async selectParties(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
+        this.trackRequest("selectParties", args)
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
@@ -70,7 +84,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         }
     }
 
-    private async findParties(toolCallId: string, args: MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
+    private async findParties(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
         this.trackRequest("findParties", args)
         return {
             toolCallId,
@@ -90,7 +104,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         }
     }
 
-    private async sendRequestInfo(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
+    private async noInfoRequired(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
         this.trackRequest("context", args)
         return {toolCallId, output: "", ...this.createEvents(args.followUpQuestions, statusEvent.generating)}
     }
