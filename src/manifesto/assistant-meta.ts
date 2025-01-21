@@ -62,7 +62,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
     }
 
     private async selectParties(toolCallId: string): Promise<ToolFunctionResult> {
-        this.trackRequest("findParties", {})
+        this.trackRequest("selectParties", {})
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
