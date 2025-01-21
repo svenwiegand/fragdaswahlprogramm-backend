@@ -11,57 +11,7 @@ import FunctionDefinition = OpenAI.FunctionDefinition
 
 export const metaAssistantId = "asst_BAY8rNqvyOlCaoVl2cqmEpr2"
 
-const category = {
-    type: "string",
-    enum: [
-        "Wirtschaft & Finanzen",
-        "Arbeit & Soziales",
-        "Bildung & Forschung",
-        "Gesundheit & Pflege",
-        "Familie & Gesellschaft",
-        "Umwelt & Klima",
-        "Migration & Integration",
-        "Außenpolitik",
-        "Sicherheit & Verteidigung",
-        "Verkehr & Infrastruktur",
-        "Digitalisierung & Technologie",
-        "Europa",
-        "Demokratie & Rechtsstaat",
-        "Innovation & Zukunft",
-    ],
-        description: "Kategorie der Anfrage",
-}
-const followUpQuestions = {
-    type: "array",
-        items: {
-        type: "string",
-    },
-    description: "Liste sinnvoller Folgefragen, die für ein tiefergehendes Verständnis relevant sein können. Keine Vergleiche unter den Parteien.",
-}
-const parties = {
-    type: "array",
-        items: {
-        type: "string",
-        enum: Object.keys(partyProps),
-    },
-    description: "Liste der Parteien, auf die sich die Anfrage bezieht.",
-}
-const minimalPrompt = {
-    type: "string",
-    description: "Kurzer, prägnanter Prompt, der die Anfrage vollständig beschreibt.",
-}
-const hasNecessaryInformation = {
-    type: "boolean",
-    description: "Gibt an, ob die notwendigen Informationen zur Beantwortung der Anfrage bereits vorliegen.",
-}
-const requestType = {
-    type: "string",
-    enum: ["positions", "parties"],
-    description: "Art der Anfrage wie im Prompt definiert.",
-}
-
 const partyNames = Object.keys(partyProps).map(p => `${partyProps[p].name}`).join(", ")
-const partyNamesWithSymbols = Object.keys(partyProps).map(p => `${partyProps[p].name}: ${p}`).join(", ")
 const refFormat = `'〔{"party": "{partySymbol}", "section": "$Abschnitt", "shortSection": "$Abschnittskurzname", "page": $Seitenzahl, "quote": $Zitat}〕'`
 
 
@@ -76,31 +26,9 @@ Du kennst ausschließlich die Wahlprogramme folgender Parteien: ${partyNames}.
 - Wenn von "die Grünen" oder "den Grünen" gesprochen wird ist damit die Partei "Bündnis 90/Die Grünen" gemeint.
 
 # 2. Aufruf der Funktion
-Du musst bei jeder Anfrage **exakt einmal** die Funktion 'getManifestoExtract' aufrufen.
+Du musst bei jeder Anfrage **exakt einmal** die Funktion 'getPartyPositions' aufrufen.
 
-Die Funktion erwartet einige Parameter, ermittle diese wie folgt:
-
-## 2.1 'requestType'
-- 'positions': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme.
-- 'parties': Der Nutzer fragt nach Parteien, die eine bestimmte Position vertreten oder eine bestimmte Maßnahme planen.
-
-Sind beide Optionen gleich wahrscheinlich, dann wähle 'positions'.
-
-## 2.2 'parties'
-Liste der Parteien, die der Nutzer entweder explizit in der Anfrage nennt oder die auf Basis des bisherigen Verlaufs der Unterhaltung mit der Anfrage gemeint sind.
-
-Stelle unbedingt sicher, dass du die Parteien benennst, auf die sich die Anfrage des Nutzers bezieht, damit der Nutzer nicht unnötig oft die Parteien von Hand auswählen muss.
-
-## 2.3 'minimalPrompt'
-
-- Der Prompt muss die aktuelle Anfrage im Kontext früherer Fragen und Antworten vollständig beschreiben.
-- Der Prompt darf keine Parteinamen enthalten und richtet sich allgemein an "die Partei".
-
-## 'hasNecessaryInformation'
-'true', falls du auf Basis des bisherigen Verlaufs der Unterhaltung alle notwendigen Informationen hast, um die Anfrage zu beantworten. 
-'false', falls weitere Informationen aus den Wahlprogrammen erforderlich sind.
-
-# 4. Beispiele
+## Beispiele
 Die Folgende fortlaufende Unterhaltung zeigt beispielhaft den Funktionsaufruf und die Parameter:
 
 - Anfrage: "Was planen die Parteien im Bereich Bildung?"
@@ -124,19 +52,19 @@ Die Folgende fortlaufende Unterhaltung zeigt beispielhaft den Funktionsaufruf un
     - minimalPrompt: "Was ist die Position der Partei zur Rente?"
     - hasNecessaryInformation: true (da die notwendigen Informationen aus den Wahlprogrammen bereits in der vorangehenden Frage ermittel wurden)
 
-# 5. Verhalten
+# 3. Verhalten
 - Werte die Informationen aus der Anfrage und der bisherigen Unterhaltung aus. 
 - Rufe die Funktion 'getPartyPositions' exakt einmal auf.
 - Generiere auf Basis der Anfrage, der bisherigen Unterhaltung und bei Bedarf aus der Ausgabe der Funktion die Antwort.
 
-# 6. Informationen aus Funktionsausgabe sammeln
+# 4. Informationen aus Funktionsausgabe sammeln
 - Sofern die aufgerufene Funktion Inhalte aus den Wahlprogrammen zurückgibt, so haben diese immer die gleiche Struktur: 
     - Eine Überschrift mit dem Namen der Partei, 
     - die Informationen in Form von Aufzählungspunkten und 
     - eine Liste von Referenzen mit Zitaten im Format ${refFormat}
 - Nutze diese Informationen um Deine Antwort zu generieren
 
-# 6. Ausgabe
+# 5. Ausgabe
 - Deine Antworten gibst du immer kompakt in Form von kurzen Aufzählungen aus.
 - Gib jedem Aufzählungspunkt genügend Kontextinformationen, damit der Nutzer qualifiziert informiert wird.
 - Beende *jeden* Aufzählungspunkt nach dem Satzendezeichen jeweils mit der passenden Referenz. Gib die Referenz immer im Format ${refFormat} aus.
@@ -144,15 +72,70 @@ Die Folgende fortlaufende Unterhaltung zeigt beispielhaft den Funktionsaufruf un
 - Du sprichst den Nutzer informell an und nutzt einfache Sprache.
 - Vorschläge für Folgefragen übergibst Du ausschließlich an die Funktionen, fügst sie aber *nicht* zur Ausgabe hinzu.
 
-# 7. Hinweise zur Robustheit
+# 6. Hinweise zur Robustheit
 - Stelle unbedingt sicher, dass jeder Aufzählungspunkt Deiner Antwort mit einer Referenz endet.
 - Übergib unbedingt die Liste der angefragten Parteien an die Funktion 'getPartyPositions'.
 - Ruf die Funktion unbedingt nur ein einziges Mal auf.
 `
+
+
+const requestType = {
+    type: "string",
+    enum: ["positions", "parties"],
+    description: `
+        - 'positions': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme.
+        - 'parties': Der Nutzer fragt nach Parteien, die eine bestimmte Position vertreten oder eine bestimmte Maßnahme planen.
+
+        Sind beide Optionen gleich wahrscheinlich, dann wähle 'positions'.
+        `,
+}
+const parties = {
+    type: "array",
+    items: {
+        type: "string",
+        enum: Object.keys(partyProps),
+    },
+    description: "Liste der Parteien, die der Nutzer entweder explizit in der Anfrage nennt oder die auf Basis des bisherigen Verlaufs der Unterhaltung mit der Anfrage gemeint sind.",
+}
+const minimalPrompt = {
+    type: "string",
+    description: "Der Prompt muss die aktuelle Anfrage im Kontext früherer Fragen und Antworten vollständig beschreiben und darf keine Parteinamen enthalten, sondern richtet sich allgemein an 'die Partei'.",
+}
+const hasNecessaryInformation = {
+    type: "boolean",
+    description: "'true', falls auf Basis des bisherigen Verlaufs der Unterhaltung alle notwendigen Informationen zur Verfügung stehen, um die Anfrage zu beantworten. 'false', falls weitere Informationen aus den Wahlprogrammen erforderlich sind.",
+}
+const followUpQuestions = {
+    type: "array",
+    items: {
+        type: "string",
+    },
+    description: "Liste sinnvoller Folgefragen, die für ein tiefergehendes Verständnis für den Nutzer relevant sein können. Keine Vergleiche unter den Parteien.",
+}
+const category = {
+    type: "string",
+    enum: [
+        "Wirtschaft & Finanzen",
+        "Arbeit & Soziales",
+        "Bildung & Forschung",
+        "Gesundheit & Pflege",
+        "Familie & Gesellschaft",
+        "Umwelt & Klima",
+        "Migration & Integration",
+        "Außenpolitik",
+        "Sicherheit & Verteidigung",
+        "Verkehr & Infrastruktur",
+        "Digitalisierung & Technologie",
+        "Europa",
+        "Demokratie & Rechtsstaat",
+        "Innovation & Zukunft",
+    ],
+    description: "Kategorie der Anfrage",
+}
 const metaFunctionDefinitions: FunctionDefinition[] = [
     {
         name: "getPartyPositions",
-        description: "Liefert bei Bedarf Informationen aus den Wahlprogrammen der Parteien. Darf nur einmal je Anfrage aufgerufen werden!",
+        description: "Liefert bei Informationen aus den Wahlprogrammen der Parteien. Darf nur einmal je Anfrage aufgerufen werden!",
         parameters: {
             type: "object",
             properties: {
@@ -160,16 +143,16 @@ const metaFunctionDefinitions: FunctionDefinition[] = [
                 parties,
                 minimalPrompt,
                 hasNecessaryInformation,
-                category,
                 followUpQuestions,
+                category,
             },
             required: [
                 "requestType",
                 "parties",
                 "minimalPrompt",
                 "hasNecessaryInformation",
-                "category",
                 "followUpQuestions",
+                "category",
             ],
             additionalProperties: false,
         },
