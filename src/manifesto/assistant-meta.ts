@@ -9,12 +9,14 @@ import {
 } from "../assistant/assistant-run"
 import {AIClient, environmentRegion} from "../common/ai-client"
 import {metaAssistantId} from "./assistant-setup"
-import {maxNumberParties, parties, Party, partyProps} from "./parties"
+import {parties, Party, partyProps} from "./parties"
 import {createPartyAssistantRun} from "./assistant-party"
 import {HttpRequest} from "@azure/functions"
 import {StreamingFunctionResponse} from "../common/ai-function"
 import {getMixpanelEvent, mixpanel} from "../common/mixpanel"
 
+const maxNumberPartyPositions = 4
+const maxNumberPartySearch = 6
 
 type PartiesArg = {
     parties: Party[]
@@ -66,21 +68,25 @@ class MetaAssistantRun extends AssistantRun<Result> {
     private async getPartyPositionsFunction(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
         if (args.hasNecessaryInformation) {
             return await this.noInfoRequired(toolCallId, args)
-        } else if (args.requestType === "parties" && args.parties.length === 0) {
-            return await this.findParties(toolCallId, args)
-        } else if (args.parties.length === 0 || args.parties.length > maxNumberParties) {
-            return await this.selectParties(toolCallId, args)
+        } else if (args.requestType === "parties") {
+            if (args.parties.length === 0 || args.parties.length > maxNumberPartySearch) {
+                return await this.selectParties(toolCallId, maxNumberPartySearch, args)
+            } else {
+                return await this.findParties(toolCallId, args)
+            }
+        } else if (args.parties.length === 0 || args.parties.length > maxNumberPartySearch) { // it's intentional, that we check for maxNumberPartySearch here, if the previous request was a party selection for a party search
+            return await this.selectParties(toolCallId, maxNumberPartyPositions, args)
         } else {
             return await this.getManifestoExtract(toolCallId, args)
         }
     }
 
-    private async selectParties(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
+    private async selectParties(toolCallId: string, maxNumberParties: number, args: FunctionArgs): Promise<ToolFunctionResult> {
         this.trackRequest("selectParties", args)
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
-            ...this.createEvents(undefined, {command: "selectParties"}),
+            ...this.createEvents(undefined, {command: `selectParties(${maxNumberParties})`}),
         }
     }
 
