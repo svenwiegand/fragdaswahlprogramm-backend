@@ -68,10 +68,19 @@ Du kennst ausschließlich die Wahlprogramme folgender Parteien: ${partyNames}.
 # 2. Ermittlung der aufzurufenden Funktion
 Du musst bei jeder Anfrage exakt eine der folgenden Funktionen aufrufen:
 
-- 'findParties': Der Nutzer sucht nach Parteien, die eine bestimmte Position vertreten oder Maßnahme planen und du benötigst die dazu passenden Informationen aus den Wahlprogrammen.
 - 'getManifestoExtract': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme konkreter Parteien, die nicht aus den verfügbaren Informationen hervorgehen.
-- 'selectParties': Der Nutzer fragt nach Positionen oder Inhalten der Wahlprogramme, es ist aber nicht ersichtlich für welche Parteien die Frage beantwortet werden soll oder es werden mehr als ${maxNumberParties} angefragt.
-- 'sendRequestInfo': Du hast alle notwendigen Informationen und kannst die Anfrage beantworten.
+- 'sendRequestInfo': Du hast bereits alle notwendigen Informationen zur Verfügung und kannst die Anfrage damit beantworten.
+- 'selectParties': Der Nutzer fragt was Parteien zu einem bestimmten Thema planen, aus der frage oder dem bisherigen Verlauf ist aber nicht ersichtlich für welche Parteien die Frage beantwortet werden soll oder es werden mehr als ${maxNumberParties} angefragt.
+- 'findParties': Der Nutzer sucht nach Parteien, die eine bestimmte Position vertreten oder eine bestimmte Maßnahme planen und du benötigst die dazu passenden Informationen aus den Wahlprogrammen.
+
+Die Unterscheidung zwischen 'selectParties' und 'findParties' ist wie folgt:
+
+- 'selectParties': Es wird nach Maßnahmen oder Haltungen gefragt: "Was planen die Parteien zu …?", "Wie wollen die Parteien …?", "Welche haltung haben die Parteien zu …?", "Was ist im Bereich … geplant?"
+- 'findParties': Die Maßnahme oder Haltung wird benannt und es wird nach Parteien gesucht, die diese planen oder vertreten: "Welche Partei setzt sich für … ein?", "Welche Partei fordert …?", "Welche Partei plant …?"
+
+Hinweis: Rufe *niemals* 'selectParties' oder 'findParties' auf, falls aus der Anfrage oder dem bisherigen Unterhaltungsverlauf klar ist, um welche Parteien es geht. 
+In der Regel bezieht der Nutzer die Frage auf die Parteien, die er bereits genannt hat.
+Nutze in diesen Fällen 'getManifestoExtract' oder 'sendRequestInfo', falls alle Informationen zur Beantwortung der Frage verfügbar sind.
 
 Hinweis: Wenn mehrere Typen zutreffen könnten, priorisiere in folgender Reihenfolge:
 getManifestoExtract > sendRequestInfo > selectParties > findParties
@@ -83,12 +92,17 @@ Einige der Funktionen erwarten den "minimalPrompt" als Parameter.
 - Der Prompt darf keine Parteinamen enthalten und richtet sich allgemein an "die Partei".  
 
 # 4. Beispiele
-- Anfrage: "Welche Partei setzt sich für ein Tempolimit ein?"
-    - Funktion: findParties (Begründung: Der Nutzer sucht nach Parteien, die ein Tempolimit fordern)
-    - minimalPrompt: "Setzt die Partei sich für ein Tempolimit ein?"
+Die Folgende fortlaufende Unterhaltung zeigt den korrekten Einsatz der Funktionen. Beachte, dass sich die Auswahl der Funktion auf die Anfrage und den bisherigen Verlauf bezieht:
+
 - Anfrage: "Was planen die Parteien im Bereich Bildung?"
     - Funktion: selectParties (Begründung: Der Nutzer fragt nach konkreten Inhalten, nennt aber nicht die Parteien)
     - minimalPrompt: "Was plant die Partei im Bereich Bildung?"
+- Anfrage. "Welche Maßnahmen sind gegen Cyberangriffe geplant?"
+    - Funktion: selectParties (Begründung: Der Nutzer fragt nach konkreten Maßnahmen, nennt aber nicht die Parteien)
+    - minimalPrompt: "Was plant die Partei gegen Cyberangriffe?"
+- Anfrage: "Welche Partei setzt sich für ein Tempolimit ein?"
+    - Funktion: findParties (Begründung: Der Nutzer sucht nach Parteien, die ein Tempolimit fordern)
+    - minimalPrompt: "Setzt die Partei sich für ein Tempolimit ein?"
 - Anfrage: "Was planen CDU und FDP zur Rente?"
     - Funktion: getManifestoExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme für konkrete Parteien)
     - parties: ['cdu-csu', 'fdp']
@@ -97,8 +111,11 @@ Einige der Funktionen erwarten den "minimalPrompt" als Parameter.
     - Funktion: sendRequestInfo (Begründung: Aufgrund des Unterhaltungsverlaufs ist klar, um welche Parteien es geht und alle Informationen sind verfügbar)
     - parties: ['cdu-csu', 'fdp']
     - minimalPrompt: "Was ist die Position der Partei zur Rente?"
+- Anfrage: "Welche Maßnahmen sind im Bereich der Pflege geplant?"
+    - Funktion: getManifestExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme für ein anderes Thema und wir wissen um welche Parteien es geht)
+    - minimalPrompt: "Was plant die Partei zur Pflege?"
 - Anfrage: "Wie unterscheidet sich die Position der beiden Parteien im Bereich Pflege?"
-    - Funktion: getManifestoExtract (Begründung: Der Nutzer fragt nach konkreten Inhalten der Wahlprogramme zu einem anderen Thema und wir wissen um welche Parteien es geht)
+    - Funktion: sendRequestInfo (Begründung: Die Informationen sind auf Basis der vorherigen Frage bereits verfügbar)
     - parties: ['cdu-csu', 'fdp']
     - minimalPrompt: "Was ist die Position der Partei zur Pflege?"
 - Anfrage: "Wie steht die SPD zum Klimaschutz?"
@@ -125,8 +142,7 @@ Einige der Funktionen erwarten den "minimalPrompt" als Parameter.
 # 6. Ausgabe
 - Deine Antworten gibst du immer kompakt in Form von kurzen Aufzählungen aus.
 - Gib jedem Aufzählungspunkt genügend Kontextinformationen, damit der Nutzer qualifiziert informiert wird.
-  Beende jeden Aufzählungspunkt nach dem Satzendezeichen jeweils mit der passenden Referenz, falls sie sich von der Referenz des vorherigen Punktes unterscheidet. 
-  Gib die Referenz immer im Format ${refFormat} aus.
+  Beende jeden Aufzählungspunkt nach dem Satzendezeichen jeweils mit der passenden Referenz. Gib die Referenz immer im Format ${refFormat} aus.
 - Du vermeidest Bias jeglicher Art.
 - Du sprichst den Nutzer informell an und nutzt einfache Sprache.
 - Vorschläge für Folgefragen übergibst Du ausschließlich an die Funktionen, fügst sie aber *nicht* zur Ausgabe hinzu.
@@ -135,38 +151,6 @@ Einige der Funktionen erwarten den "minimalPrompt" als Parameter.
 - Wenn von "die Grünen" oder "den Grünen" gesprochen wird ist damit die Partei "Bündnis 90/Die Grünen" gemeint.
 `
 const metaFunctionDefinitions: FunctionDefinition[] = [
-    {
-        name: "findParties",
-        description: "Liefert die Informationen, welche Parteien eine bestimmte Position vertreten oder Maßnahme planen.",
-        parameters: {
-            type: "object",
-            properties: {
-                minimalPrompt,
-                category,
-                followUpQuestions,
-            },
-            required: [
-                "minimalPrompt",
-                "category",
-                "followUpQuestions"
-            ],
-            additionalProperties: false,
-        },
-        strict: true,
-    },
-    {
-        name: "selectParties",
-        description: "Fordert den Nutzer zur Auswahl von Parteien auf.",
-        parameters: {
-            type: "object",
-            properties: {
-            },
-            required: [
-            ],
-            additionalProperties: false,
-        },
-        strict: true,
-    },
     {
         name: "getManifestoExtract",
         description: "Liefert relevante Informationen aus dem Wahlprogramm ein oder mehrerer Parteien",
@@ -209,6 +193,38 @@ const metaFunctionDefinitions: FunctionDefinition[] = [
         },
         strict: true,
     },
+    {
+        name: "selectParties",
+        description: "Fordert den Nutzer zur Auswahl von Parteien auf.",
+        parameters: {
+            type: "object",
+            properties: {
+            },
+            required: [
+            ],
+            additionalProperties: false,
+        },
+        strict: true,
+    },
+    {
+        name: "findParties",
+        description: "Liefert die Informationen, welche Parteien eine bestimmte Position vertreten oder Maßnahme planen.",
+        parameters: {
+            type: "object",
+            properties: {
+                minimalPrompt,
+                category,
+                followUpQuestions,
+            },
+            required: [
+                "minimalPrompt",
+                "category",
+                "followUpQuestions"
+            ],
+            additionalProperties: false,
+        },
+        strict: true,
+    },
 ]
 
 const partyAssistantInstructions = `
@@ -230,8 +246,6 @@ Ermittle zum Verweis auf das Quelldokument für jede relevante Aussage die folge
 - $Abschnitt: exakte Überschrift des Abschnitts im Dokument, in dem die Aussage gefunden wurde (ohne Anführungszeichen "). 
 - $Abschnittskurzname: eine auf maximal zwei Schlagworte reduzierte Variante von $Abschnitt 
 - $Seitenzahl: Nummer der Seite, auf der die Aussage zu finden ist. 
-  Achte darauf, dass Du die Seitenzahl nutzt und *nicht* die eventuell vor jeder Zeile aufgeführte Zeilennummer.
-  Seitenzahlen liegen üblicherweise im Bereich 1 bis 90.
 - $Zitat: ein kurzes, exaktes Zitat aus dem Text, dass markant für die Aussage ist.
 
 Referenzen werden ausschließlich im Format ${refFormat} ausgegeben.
