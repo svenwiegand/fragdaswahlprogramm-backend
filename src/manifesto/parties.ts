@@ -1,4 +1,4 @@
-export type Party = "afd" | "gruene" | "bsw" | "cdu-csu" | "fdp" | "linke" | "spd" | "volt"
+export type Party = "afd" | "gruene" | "buendnis-deutschland" | "bsw" | "cdu-csu" | "fdp" | "linke" | "spd" | "volt"
 export type PartyProps = {
     name: string
     symbol: string
@@ -47,6 +47,21 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_LbRHSGCHuPbTnalFApzRTBMm",
                 vectorStoreId: "vs_80FWzufpW3Smerv0pxhtT9nn",
+            }
+        }
+    },
+    "buendnis-deutschland": {
+        name: "Bündnis Deutschland",
+        symbol: "buendnis-deutschland",
+        manifestoTitle: "Wahlprogramm vom Bündnis Deutschland",
+        region: {
+            swedencentral: {
+                assistantId: "asst_OpGpYniM3lnAtsFoDCmci7GY",
+                vectorStoreId: "vs_VSAWDCwrGGnal3ef7rwapVPm",
+            },
+            eastus: {
+                assistantId: "",
+                vectorStoreId: "",
             }
         }
     },
