@@ -7,7 +7,7 @@ import {
     RunStream, SSEEvent,
     ToolFunctionResult,
 } from "../assistant/assistant-run"
-import {AIClient} from "../common/ai-client"
+import {AIClient, environmentRegion} from "../common/ai-client"
 import {metaAssistantId} from "./assistant-setup"
 import {maxNumberParties, parties, Party, partyProps} from "./parties"
 import {createPartyAssistantRun} from "./assistant-party"
@@ -133,7 +133,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
 
     private async inputAssistants(parties: Party[], prompt: string, searchResults: "many" | "medium" | "few"): Promise<{ inputAssistants: AssistantRun[] }> {
         const inputAssistants = await Promise.all(parties.map(async party =>
-            createPartyAssistantRun(party, this.aiClient, partyProps[party].assistantId, prompt, searchResults),
+            createPartyAssistantRun(party, this.aiClient, partyProps[party].region[environmentRegion].assistantId, prompt, searchResults),
         ))
         return {inputAssistants}
     }
@@ -147,7 +147,7 @@ async function createMetaAssistantRun(
     return await createRun({
         name: "Meta Assistant",
         aiClient,
-        assistantId: metaAssistantId,
+        assistantId: metaAssistantId[environmentRegion],
         threadId,
         message,
     }, (name, aiClient, threadId, stream, model) => new MetaAssistantRun(name, aiClient, threadId, stream, model))

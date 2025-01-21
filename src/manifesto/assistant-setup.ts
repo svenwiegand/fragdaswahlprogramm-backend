@@ -8,8 +8,12 @@ import {
 import path from "node:path"
 import {prepareMarkdown} from "./extract-manifesto"
 import FunctionDefinition = OpenAI.FunctionDefinition
+import {environmentRegion} from "../common/ai-client"
 
-export const metaAssistantId = "asst_BAY8rNqvyOlCaoVl2cqmEpr2"
+export const metaAssistantId = {
+    swedencentral: "asst_iDqo1jpKOaCxsWkqBDe45sO7",
+    eastus: "asst_BAY8rNqvyOlCaoVl2cqmEpr2",
+}
 
 const partyNames = Object.keys(partyProps).map(p => `${partyProps[p].name}`).join(", ")
 const refFormat = `'〔{"party": "{partySymbol}", "section": "$Abschnitt", "shortSection": "$Abschnittskurzname", "page": $Seitenzahl, "quote": $Zitat}〕'`
@@ -202,8 +206,9 @@ Unzulässige Referenz:
 `
 
 export async function updateMetaAssistant() {
-    await updateAssistantInstructions(metaAssistantId, metaInstructions)
-    await updateAssistantFunctionDefinition(metaAssistantId, metaFunctionDefinitions)
+    const assistantId = metaAssistantId[environmentRegion]
+    await updateAssistantInstructions(assistantId, metaInstructions)
+    await updateAssistantFunctionDefinition(assistantId, metaFunctionDefinitions)
 }
 
 export async function updatePartyAssistants() {
@@ -213,12 +218,12 @@ export async function updatePartyAssistants() {
 }
 
 async function updatePartyAssistant(party: Party) {
-    const {symbol, name, assistantId} = partyProps[party]
+    const {symbol, name, region} = partyProps[party]
     const instructions = partyAssistantInstructions
         .replace(/{partySymbol}/g, symbol)
         .replace(/{partyName}/g, name)
         .replace(/{partyManifesto}/g, partyProps[party].manifestoTitle)
-    await updateAssistantInstructions(assistantId, instructions)
+    await updateAssistantInstructions(region[environmentRegion].assistantId, instructions)
 }
 
 export async function updateVectorStore(party: Party | "all") {
@@ -230,6 +235,6 @@ export async function updateVectorStore(party: Party | "all") {
         // ensure, that a paragraph fits into a chunk,
         // we've prepared the markdown, so that each paragraph contains page and section information.
         // The longest paragraphs contained less than 400 tokens.
-        await replaceVectorStoreFiles(partyProps[party].vectorStoreId, filePath, 400, 200)
+        await replaceVectorStoreFiles(partyProps[party].region[environmentRegion].vectorStoreId, filePath, 400, 200)
     }
 }

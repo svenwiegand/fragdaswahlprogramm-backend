@@ -1,5 +1,5 @@
 import {HttpRequest} from "@azure/functions"
-import {AIClient} from "../common/ai-client"
+import {AIClient, environmentRegion} from "../common/ai-client"
 import {SSEStream, StreamingFunctionResponse} from "../common/ai-function"
 import {AssistantStreamEvent} from "openai/resources/beta"
 import {TextEncoder} from "node:util"
@@ -56,7 +56,7 @@ async function generateThreadResponse(
 ): Promise<StreamingFunctionResponse> {
     await aiClient.beta.threads.messages.create(threadId, {role, content: message})
     const stream = await aiClient.beta.threads.runs.create(threadId, {
-        assistant_id: metaAssistantId,
+        assistant_id: metaAssistantId[environmentRegion],
         tool_choice: "required",//{type: "function", function: {name: "get_instructions"}},
         stream: true,
     })
@@ -279,7 +279,7 @@ async function getManifestoContent(aiClient: AIClient, party: Party, prompt: str
     const thread = await aiClient.beta.threads.create({})
     await aiClient.beta.threads.messages.create(thread.id, {role, content: prompt})
     const stream = await aiClient.beta.threads.runs.create(thread.id, {
-        assistant_id: partyProps[party].assistantId,
+        assistant_id: partyProps[party].region[environmentRegion].assistantId,
         tool_choice: "required",
         stream: true,
     })
