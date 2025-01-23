@@ -1,4 +1,5 @@
-export type Party = "afd" | "gruene" | "buendnis-deutschland" | "bsw" | "cdu-csu" | "fdp" | "linke" | "spd" | "volt"
+export type Party = "afd" | "gruene" | "bsw" | "cdu-csu" | "fdp" | "linke" | "spd" |
+    "buendnis-deutschland" | "diebasis" | "ssw" | "volt"
 export type PartyProps = {
     name: string
     symbol: string
@@ -32,8 +33,8 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_Y50VIgfMdOe3NNZbsGYikO4A",
                 vectorStoreId: "vs_xgpmGiMbUQHWhZYMizlTLB4f",
-            }
-        }
+            },
+        },
     },
     gruene: {
         name: "Bündnis 90/Die Grünen",
@@ -47,23 +48,8 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_LbRHSGCHuPbTnalFApzRTBMm",
                 vectorStoreId: "vs_80FWzufpW3Smerv0pxhtT9nn",
-            }
-        }
-    },
-    "buendnis-deutschland": {
-        name: "Bündnis Deutschland",
-        symbol: "buendnis-deutschland",
-        manifestoTitle: "Wahlprogramm vom Bündnis Deutschland",
-        region: {
-            swedencentral: {
-                assistantId: "asst_OpGpYniM3lnAtsFoDCmci7GY",
-                vectorStoreId: "vs_VSAWDCwrGGnal3ef7rwapVPm",
             },
-            eastus: {
-                assistantId: "",
-                vectorStoreId: "",
-            }
-        }
+        },
     },
     bsw: {
         name: "Bündnis Sarah Wagenknecht",
@@ -77,8 +63,8 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_WICiQECl5VmFtohFZOMjzhqa",
                 vectorStoreId: "vs_e2rtLeyZ1QZB0FB1jTyitVu5",
-            }
-        }
+            },
+        },
     },
     "cdu-csu": {
         name: "CDU/CSU",
@@ -93,7 +79,7 @@ export const partyProps: Record<Party, PartyProps> = {
                 assistantId: "asst_rupfiWLSA5M98C8LY8rpeAnf",
                 vectorStoreId: "vs_1SfJi2VVGbZ5iBX54dbgKXYW",
             },
-        }
+        },
     },
     fdp: {
         name: "FDP",
@@ -123,7 +109,7 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_WaYnfW9RZsUmB9BV4w9Zw1BI",
                 vectorStoreId: "vs_IpMzJp78XduPiJSkmsvMatXC",
-            }
+            },
         },
     },
     spd: {
@@ -139,7 +125,54 @@ export const partyProps: Record<Party, PartyProps> = {
                 assistantId: "asst_8MNBjRJsuvJ9sauqrAXDFtLP",
                 vectorStoreId: "vs_HS99hjmm0cg4MI5RzdyYhmnY",
             },
-        }
+        },
+    },
+
+
+    "buendnis-deutschland": {
+        name: "Bündnis Deutschland",
+        symbol: "buendnis-deutschland",
+        manifestoTitle: "Wahlprogramm vom Bündnis Deutschland",
+        region: {
+            swedencentral: {
+                assistantId: "asst_OpGpYniM3lnAtsFoDCmci7GY",
+                vectorStoreId: "vs_VSAWDCwrGGnal3ef7rwapVPm",
+            },
+            eastus: {
+                assistantId: "",
+                vectorStoreId: "",
+            },
+        },
+    },
+    "diebasis": {
+        name: "Basisdemokratische Partei Deutschland",
+        symbol: "diebasis",
+        manifestoTitle: "Wahlprogramm von dieBasis",
+        region: {
+            swedencentral: {
+                assistantId: "asst_Ouw95A58TZIxCdnWAkxW8ire",
+                vectorStoreId: "vs_Vo6wtwnEcBjyxwMIBM87BV6N",
+            },
+            eastus: {
+                assistantId: "",
+                vectorStoreId: "",
+            },
+        },
+    },
+    ssw: {
+        name: "Basisdemokratische Partei Deutschland",
+        symbol: "ssw",
+        manifestoTitle: "Wahlprogramm vom SSW",
+        region: {
+            swedencentral: {
+                assistantId: "asst_PcjId80lFme8GAv9R9yX0sva",
+                vectorStoreId: "vs_RNFlelOSWmPIoI7UtxrIm5uz",
+            },
+            eastus: {
+                assistantId: "",
+                vectorStoreId: "",
+            },
+        },
     },
     volt: {
         name: "Volt",
@@ -153,8 +186,8 @@ export const partyProps: Record<Party, PartyProps> = {
             eastus: {
                 assistantId: "asst_WNVeHbSwZrm3uoPDlu6c7tO5",
                 vectorStoreId: "vs_NbhXNeR2DiHYHCzkEngHnywS",
-            }
-        }
-    }
+            },
+        },
+    },
 }
 export const parties = Object.keys(partyProps) as Party[]
