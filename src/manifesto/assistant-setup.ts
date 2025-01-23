@@ -109,13 +109,6 @@ const hasNecessaryInformation = {
     type: "boolean",
     description: "'true', falls auf Basis des bisherigen Verlaufs der Unterhaltung alle notwendigen Informationen zur Verfügung stehen, um die Anfrage zu beantworten. 'false', falls weitere Informationen aus den Wahlprogrammen erforderlich sind.",
 }
-const followUpQuestions = {
-    type: "array",
-    items: {
-        type: "string",
-    },
-    description: "Liste sinnvoller Folgefragen, die für ein tiefergehendes Verständnis für den Nutzer relevant sein können. Keine Vergleiche unter den Parteien.",
-}
 const category = {
     type: "string",
     enum: [
@@ -147,7 +140,6 @@ const metaFunctionDefinitions: FunctionDefinition[] = [
                 parties,
                 minimalPrompt,
                 hasNecessaryInformation,
-                followUpQuestions,
                 category,
             },
             required: [
@@ -155,7 +147,6 @@ const metaFunctionDefinitions: FunctionDefinition[] = [
                 "parties",
                 "minimalPrompt",
                 "hasNecessaryInformation",
-                "followUpQuestions",
                 "category",
             ],
             additionalProperties: false,

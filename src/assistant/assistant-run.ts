@@ -72,6 +72,7 @@ export const initialAssistantRunResult: AssistantRunResult = {
     outputTokensMini: 0,
 }
 
+export type PostProcessor = (result: AssistantRunResult, content: string) => Promise<SSEEvent[]>|SSEEvent[]
 export type RunCompletedListener = (result: AssistantRunResult, content?: string) => Promise<void>|void
 
 type FunctionProcessingResult = {
@@ -89,6 +90,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
     private runId: string | undefined
     private content = ""
     private runResult: Result
+    private postProcessors: PostProcessor[] = []
     private resultListeners: RunCompletedListener[] = []
 
     protected readonly toolFunctions: Record<string, ToolFunction> = {}
@@ -100,6 +102,17 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
         this.rootStream = stream
         this.model = model
         this.runResult = {...initialResult, threadId, name}
+    }
+
+    addPostProcessor(processor: PostProcessor): void {
+        this.postProcessors.push(processor)
+    }
+
+    private async *postProcess(): SSEStream {
+        const events = (await Promise.all(this.postProcessors.map(processor => processor(this.runResult, this.content)))).flatMap(e => e)
+        for (const event of events) {
+            yield* this.sendEvent(event.event, event.data)
+        }
     }
 
     addCompletedListener(listener: RunCompletedListener): void {
@@ -205,6 +218,7 @@ export class AssistantRun<Result extends AssistantRunResult = AssistantRunResult
             } else if (event.event === "thread.message.delta") {
                 yield* this.processMessageDelta(event)
             } else if (event.event === "thread.run.completed") {
+                yield* await this.postProcess()
                 this.onFinalEvent(event)
             } else if (event.event === "thread.run.failed") {
                 this.onFinalEvent(event)

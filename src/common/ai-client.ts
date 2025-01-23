@@ -15,10 +15,17 @@ const regionEnv = (name: string): string => {
 }
 
 export type AIClient = AzureOpenAI
-export const aiClient = new AzureOpenAI({
+export const aiStandardModelClient = new AzureOpenAI({
     endpoint: regionEnv("AZURE_OPENAI_ENDPOINT"),
     apiKey: regionEnv("AZURE_OPENAI_API_KEY"),
     apiVersion: process.env.MESSAGE_AZURE_OPENAI_API_VERSION,
-    deployment: process.env.MESSAGE_AZURE_OPENAI_DEPLOYMENT,
+    deployment: "gpt-4o",
 })
+export const aiMiniModelClient = new AzureOpenAI({
+    endpoint: regionEnv("AZURE_OPENAI_ENDPOINT"),
+    apiKey: regionEnv("AZURE_OPENAI_API_KEY"),
+    apiVersion: process.env.MESSAGE_AZURE_OPENAI_API_VERSION,
+    deployment: "gpt-4o-mini",
+})
+export const aiClient = aiStandardModelClient
 

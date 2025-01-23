@@ -4,7 +4,8 @@ import {
     AssistantRunResult,
     createRun,
     initialAssistantRunResult,
-    RunStream, SSEEvent,
+    RunStream,
+    SSEEvent,
     ToolFunctionResult,
 } from "../assistant/assistant-run"
 import {AIClient, environmentRegion} from "../common/ai-client"
@@ -14,6 +15,7 @@ import {createPartyAssistantRun} from "./assistant-party"
 import {HttpRequest} from "@azure/functions"
 import {StreamingFunctionResponse} from "../common/ai-function"
 import {getMixpanelEvent, mixpanel} from "../common/mixpanel"
+import {generateSuggestions} from "./suggestions"
 
 const maxNumberPartyPositions = 4
 const maxNumberPartySearch = 6
@@ -27,11 +29,8 @@ type MinimalPromptArg = {
 type CategoryArg = {
     category: string
 }
-type FollowUpQuestionsArg = {
-    followUpQuestions: string[]
-}
 
-type FunctionArgs = PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg & {
+type FunctionArgs = PartiesArg & MinimalPromptArg & CategoryArg & {
     requestType: "positions" | "parties"
     hasNecessaryInformation: boolean
 }
@@ -63,6 +62,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
             category: "unknown",
             followUpQuestions: [],
         })
+        this.addPostProcessor(this._generateSuggestions.bind(this))
     }
 
     private async getPartyPositionsFunction(toolCallId: string, args: FunctionArgs): Promise<ToolFunctionResult> {
@@ -86,7 +86,7 @@ class MetaAssistantRun extends AssistantRun<Result> {
         return {
             toolCallId,
             output: `Bitte den Nutzer, maximal ${maxNumberParties} Parteien auszuwählen, für die er eine Antwort wünscht. Liste die Parteien *nicht* auf!`,
-            ...this.createEvents(undefined, {command: `selectParties(${maxNumberParties})`}),
+            ...this.createEvents({command: `selectParties(${maxNumberParties})`}),
         }
     }
 
@@ -96,44 +96,41 @@ class MetaAssistantRun extends AssistantRun<Result> {
             toolCallId,
             output: "",
             ...await this.inputAssistants(parties, args.minimalPrompt, "few"),
-            ...this.createEvents(args.followUpQuestions, statusEvent.searching),
+            ...this.createEvents(statusEvent.searching),
         }
     }
 
-    private async getManifestoExtract(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
+    private async getManifestoExtract(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg): Promise<ToolFunctionResult> {
         this.trackRequest("manifestoExtract", args)
         return {
             toolCallId,
             output: "",
             ...await this.inputAssistants(args.parties, args.minimalPrompt, args.parties.length == 1 ? "many" : "medium"),
-            ...this.createEvents(args.followUpQuestions, statusEvent.searching),
+            ...this.createEvents(statusEvent.searching),
         }
     }
 
-    private async noInfoRequired(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg): Promise<ToolFunctionResult> {
+    private async noInfoRequired(toolCallId: string, args: PartiesArg & MinimalPromptArg & CategoryArg): Promise<ToolFunctionResult> {
         this.trackRequest("context", args)
-        return {toolCallId, output: "", ...this.createEvents(args.followUpQuestions, statusEvent.generating)}
+        return {toolCallId, output: "", ...this.createEvents(statusEvent.generating)}
     }
 
-    private trackRequest(requestType: Result["queryType"], args: Partial<PartiesArg & MinimalPromptArg & CategoryArg & FollowUpQuestionsArg>) {
+    private trackRequest(requestType: Result["queryType"], args: Partial<PartiesArg & MinimalPromptArg & CategoryArg>) {
         console.log(`==> ${requestType}`, args)
         this.updateResult(prev => ({
             queryType: requestType,
             category: args.category ?? prev.category,
             subPrompt: args.minimalPrompt ?? prev.subPrompt,
-            followUpQuestions: Array.from(new Set([...prev.followUpQuestions, ...(args.followUpQuestions ?? [])])),
             queriedParties: [...prev.queriedParties, ...(args.parties ?? [])],
         }))
     }
 
     private createEvents(
-        followUpQuestions: string[] | undefined = undefined,
         events: Record<string, string> | undefined = undefined
     ): {events: SSEEvent[]} {
-        const followUpEvents = followUpQuestions ? followUpQuestions.map(data => ({event: "followUpQuestion", data})) : []
         const otherEvents = events ? Object.entries(events).map(([event, data]) => ({event, data})) : []
         return {
-            events: [...followUpEvents, ...otherEvents]
+            events: [...otherEvents]
         }
     }
 
@@ -142,6 +139,25 @@ class MetaAssistantRun extends AssistantRun<Result> {
             createPartyAssistantRun(party, this.aiClient, partyProps[party].region[environmentRegion].assistantId, prompt, searchResults),
         ))
         return {inputAssistants}
+    }
+
+    private async _generateSuggestions(result: Result, generatedContent: string): Promise<SSEEvent[]> {
+        if (result.queryType === "selectParties") {
+            return []
+        }
+
+        console.log("Generating suggestions")
+        const suggestionResult = await generateSuggestions(this.aiClient, generatedContent)
+        console.log("Suggestions generated", suggestionResult)
+        this.updateResult(result => ({
+            ...result,
+            inputTokensStandard: result.inputTokensStandard + suggestionResult.inputTokensStandard,
+            outputTokensStandard: result.outputTokensStandard + suggestionResult.outputTokensStandard,
+            inputTokensMini: result.inputTokensMini + suggestionResult.inputTokensMini,
+            outputTokensMini: result.outputTokensMini + suggestionResult.outputTokensMini,
+            suggestions: suggestionResult.suggestions,
+        }))
+        return suggestionResult.suggestions.map(data => ({event: "followUpQuestion", data}))
     }
 }
 
