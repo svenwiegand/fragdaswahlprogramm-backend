@@ -160,7 +160,7 @@ export const partyProps: Record<Party, PartyProps> = {
         },
     },
     ssw: {
-        name: "Basisdemokratische Partei Deutschland",
+        name: "Südschleswigscher Wählerverband",
         symbol: "ssw",
         manifestoTitle: "Wahlprogramm vom SSW",
         region: {
