@@ -1,24 +1,50 @@
-# fragdaswahlprogramm Backend
-Backend für [fragdaswahlprogramm](https://fragdaswahlprogramm.de) – eine Plattform zur Förderung politischer Bildung und Transparenz.
+# fragdaswahlprogramm – Backend
+Das ist das Backend zu [fragdaswahlprogramm](https://fragdaswahlprogramm.de) – einer KI-basierten Web-Site, die es Bürgern ermöglicht Fragen an die Programme der Parteien zur Bundestagswahl 2025 zu stellen. Das zugehörige Frontend findest Du [hier](https://github.com/svenwiegand/fragdaswahlprogramm-frontend).
 
-## Hinzufügen einer neuen Partei
-1. Partei unter `src/manifesto/parties.ts` hinzufügen, zunächst mit Dummy-Werten für `assistantId` und `vectorStoreId`
-2. Wahlprogramm herunterladen und unter `assets/manifesto/pdf/original/` ablegen.
-3. Bereinigtes Wahlprogramm (ohne Titelseite, Inhaltsverzeichnis, unnötige Einleitung, Schlusseiten) unter `assets/manifesto/pdf/shortened/` mit dem Namen `<symbol>.pdf` ablegen
-4. Markdown-Datei generieren: `PUT http://localhost:7071/api/manifesto/<symbol>`
-5. Assistent `wahlprogramm-<symbol>` in [Azure KI Foundry](https://ai.azure.com/resource/vectorstore) anlegen, die ID in `parties.ts` hinterlegen und folgende Einstellungen vornehmen:
-   - Bereitstellung `gpt-4o-mini`
-   - Oben angelegten Vector-Store als Dateisuche hinzufügen
-   - Temperatur auf 0,01 setzen
-6. Vom Assistenten aus den Vector-Store `wahlprogramm-<symbol>` **ohne** Datei anlegen und die ID in `parties.ts` hinterlegen.
-7. Update Vector-Store-Request durchführen: `PATCH http://localhost:7071/api/vectorstore/<symbol>`
-8. Anpassungen im Frontend vornehmen und Frontend deployen
-9. Backend deployen
-10. Assistenten aktualisieren: `PATCH http://localhost:7071/api/assistant`
+## Disclaimer
+Ich hatte schon länger geplant, dieses Projekt für die Bundestagswahl 2025 umzusetzen. Allerdings dachte ich, dass ich dafür bis September 2025 Zeit hätte. Kurz nach dem die Ampel-Regierung am 6. November 2024 dann aufgelöst wurde, habe ich mich an die Implementierung gemacht. Wirklich Zeit hatte ich dann erst in den Weihnachtsferien. 
 
-## Aktualisieren eines Wahlprogramms
-1. Wahlprogramm herunterladen und bereinigen, also Titelseite, Inhaltsverzeichnis und ggf. unnötige Einleitung entfernen
-2. Bereinigtes Wahlprogramm unter `assets/wahlprogramme-optimized` mit dem Namen `<symbol>.pdf` ablegen
-3. Update Vector-Store-Request durchführen: `PATCH http://localhost:7071/api/vectorstore/<symbol>`
-7. Anpassungen im Frontend vornehmen und Frontend deployen
-8. Backend kann, muss aber nicht deployt werden
+Da es sich hier um ein Freizeitprojekt handelt, hatte ich somit nur wenige Personentage zur Verfügung, um die Website rechtzeitig vor der vorgezogenen Bundestagswahl verfügbar zu machen. Dementsprechend gibt es diverse Kompromisse, die ich in einem normalen Projekt nicht eingehen würde:
+
+- Keinerlei automatische Tests
+- Diverse Setup-Schritte müssen manuell durchgeführt werden
+- Auch das Hinzufügen weiterer Wahlprogramme erfolgt zu großen Teilen händisch
+
+## Überblick
+- Das Backend ist als Azure Function App implementiert. 
+- Als KI-Dienst kommen die Azure OpenAI-Services zum Einsatz.
+- Als RAG-Lösung werden die noch als experimentell bezeichneten (Januar 2025) Assistenten mit zugehörigen Vector-Stores verwendet. Leider haben wir dort im Vergleich zu externen Vector-Stores nur eingeschränkte Einflussnahme auf den Ingestion-Prozess, aber dafür war eine schnelle Implementierung möglich. 
+- Es findet eine Vorverarbeitung der Wahlprogramme statt, um bestmögliche Ergebnisse im Nachgang zu erzielen. Dafür werden die PDFs mit Azure Document Intelligence in Markdown konvertiert und dann im Nachgang diese Markdowns weiter angereichert.
+- Zur Beantwortung einer Nutzerfrage werden mehrere LLM-Anfragen durchgeführt:
+  1. Der Meta-Assistant nimmt die Anfrage entgegen, kategorisiert sie und leitet diverse Informationen an eine registrierte Tool-Function weiter.
+  2. Die Tool-Function kümmert sich dann darum, dass je angefragter Partei ein eigener Assistent aufgerufen wird, der über einen eigenen Vector-Store verfügt, der ausschließlich die Chunks des betreffenden Wahlprogramms enthält. Damit wird sichergestellt, dass die Positionen verschiedener Parteien sauber auseinander gehalten und Treffer aller Parteien berücksichtigt werden. 
+  3. Jeder Partei-Assistant erstellt eine Zusammenfassung der gefundenen Positionen der Partei.
+  4. Die Ausgaben der Partei-Assistenten werden an den Meta-Assistant zur Beantwortung der ursprünglichen Frage zurückgegeben.
+  5. Als letzter Schritt wird die finale Antwort an ein LLM übergeben, um entsprechende Folgefragen zu generieren, die dem Nutzer zusätzlich angezeigt werden.
+
+  Die Prompts der Assistenten findest Du unter [`src/manifesto/assistant-setup.ts`](src/manifesto/assistant-setup.ts).
+- Aus Kostengründen werden fast alle oben beschriebenen Schritte mit GPT-4o-mini durchgeführt. Lediglich die Generierung der Folgefragen erfolgt mit GPT-4o, da hier deutlich bessere Ergebnisse erzielt werden.
+
+## Umgebungsvariablen
+Die folgenden Umgebungsvariablen müssen für Test und Betrieb gesetzt sein.
+
+Hier Beispielhaft eine `local.settings.json` für das Entwicklungssystem:
+
+```
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "",
+    "AZURE_OPENAI_REGION": "swedencentral" | "eastus" | …,
+    "AZURE_OPENAI_API_KEY_<REGION>": <key>,
+    "AZURE_OPENAI_ENDPOINT_<REGION>": "https://wahlprogramm.openai.azure.com/",
+    "MESSAGE_AZURE_OPENAI_API_VERSION": "2024-08-01-preview",
+    "MIXPANEL_PROJECT_TOKEN": <token>,
+    "AZURE_DOCUMENT_INTELLIGENCE_KEY": <key>
+  }
+}
+```
+
+## Weitere Dokumentation
+- [Hinzufügen einer neuen Partei](docs/add-party.md)
